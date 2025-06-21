@@ -12,7 +12,8 @@ from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QAction, QKeySequence, QCloseEvent
 from ..models.entry import Entry
 from .ui_styles import UIStyles
-from ..utils.time_utils import format_datetime_chinese, count_text_stats
+from ..utils.time_utils import format_datetime_chinese
+from ..utils.text_utils import count_text_stats
 
 
 class EntryWindow(QMainWindow):

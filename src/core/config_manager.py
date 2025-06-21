@@ -126,7 +126,7 @@ class ConfigManager:
                     
             return value
             
-        except Exception as e:
+        except (KeyError, TypeError, AttributeError) as e:
             self.logger.warning(f"获取配置值失败 {key}: {e}")
             return default
     
@@ -159,7 +159,7 @@ class ConfigManager:
             # 自动保存配置
             return self.save_config()
             
-        except Exception as e:
+        except (KeyError, TypeError, AttributeError, OSError, json.JSONEncodeError) as e:
             self.logger.error(f"设置配置值失败 {key}: {e}")
             log_exception(self.logger, "设置配置值", e)
             return False

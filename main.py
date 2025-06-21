@@ -26,7 +26,7 @@ def main():
         window.show()
         logger.info("主窗口已显示，进入事件循环")
         sys.exit(app.exec())
-    except Exception as e:
+    except (ImportError, RuntimeError, OSError) as e:
         logger.critical(f"应用程序启动失败: {e}")
         raise
 

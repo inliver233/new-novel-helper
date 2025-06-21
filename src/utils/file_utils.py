@@ -4,6 +4,7 @@
 
 import os
 import re
+import uuid
 from typing import Optional
 
 
@@ -123,7 +124,6 @@ def get_unique_filename(directory: str, base_name: str, extension: str = "") -> 
         
         # 防止无限循环
         if counter > 1000:
-            import uuid
             unique_id = str(uuid.uuid4())[:8]
             return f"{safe_base}_{unique_id}{extension}"
 

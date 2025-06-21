@@ -3,6 +3,7 @@
 支持条目在同一分类内的重新排序
 """
 
+import json
 from PyQt6.QtWidgets import QListWidget, QListWidgetItem, QMessageBox, QApplication
 from PyQt6.QtCore import Qt, QMimeData
 from PyQt6.QtGui import QDrag, QPainter, QPen, QColor, QCursor
@@ -360,9 +361,15 @@ class DraggableEntryList(QListWidget):
             else:
                 print("创建独立窗口失败：窗口管理器返回None")
 
-        except Exception as e:
-            print(f"创建独立窗口时出错: {e}")
-            QMessageBox.warning(self, "错误", f"创建独立窗口失败: {e}")
+        except (FileNotFoundError, PermissionError, OSError) as e:
+            print(f"创建独立窗口时出错（文件系统错误）: {e}")
+            QMessageBox.warning(self, "错误", f"创建独立窗口失败（文件系统错误）: {e}")
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            print(f"创建独立窗口时出错（数据格式错误）: {e}")
+            QMessageBox.warning(self, "错误", f"创建独立窗口失败（数据格式错误）: {e}")
+        except (RuntimeError, AttributeError, TypeError) as e:
+            print(f"创建独立窗口时出错（运行时错误）: {e}")
+            QMessageBox.warning(self, "错误", f"创建独立窗口失败（运行时错误）: {e}")
 
     def mousePressEvent(self, event):
         """鼠标按下事件"""

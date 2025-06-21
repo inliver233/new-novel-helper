@@ -156,8 +156,17 @@ class UIStyles:
     
     @staticmethod
     def get_main_stylesheet():
-        """获取主样式表"""
-        return """
+        """获取主样式表，组合基础样式组件"""
+        # 组合基础样式
+        base_styles = [
+            UIStyles.get_base_button_style(),
+            UIStyles.get_base_input_style(),
+            UIStyles.get_base_text_edit_style(),
+            UIStyles.get_base_list_widget_style(),
+        ]
+
+        # 主窗口特有样式
+        main_window_styles = """
         /* 主窗口样式 */
         QMainWindow {
             background-color: #1e1e1e;
@@ -272,84 +281,7 @@ class UIStyles:
             image: url(none);
         }
 
-        /* 列表控件样式 */
-        QListWidget {
-            background-color: #252526;
-            color: #e0e0e0;
-            border: 1px solid #3f3f46;
-            border-radius: 4px;
-            selection-background-color: #37373d;
-            outline: none;
-            padding: 2px;
-        }
 
-        QListWidget::item {
-            padding: 6px 8px;
-            border-radius: 2px;
-            margin: 1px 0px;
-        }
-
-        QListWidget::item:hover {
-            background-color: #2a2d2e;
-        }
-
-        QListWidget::item:selected {
-            background-color: #37373d;
-        }
-
-        /* 按钮样式 */
-        QPushButton {
-            background-color: #0e639c;
-            color: #ffffff;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 3px;
-            font-weight: 400;
-            font-size: 9pt;
-        }
-
-        QPushButton:hover {
-            background-color: #1177bb;
-        }
-
-        QPushButton:pressed {
-            background-color: #0d5a8a;
-        }
-
-        QPushButton:disabled {
-            background-color: #3f3f46;
-            color: #6d6d6d;
-        }
-
-        /* 输入框样式 */
-        QLineEdit {
-            background-color: #3c3c3c;
-            color: #e0e0e0;
-            border: 1px solid #52525b;
-            border-radius: 3px;
-            padding: 6px 8px;
-            font-size: 9pt;
-        }
-
-        QLineEdit:focus {
-            border-color: #0e639c;
-        }
-
-        /* 文本编辑器样式 */
-        QTextEdit {
-            background-color: #1e1e1e;
-            color: #e0e0e0;
-            border: 1px solid #52525b;
-            border-radius: 3px;
-            padding: 8px;
-            font-family: "Consolas", "Monaco", "Courier New", monospace;
-            font-size: 10pt;
-            line-height: 1.4;
-        }
-
-        QTextEdit:focus {
-            border-color: #0e639c;
-        }
 
         /* 分组框样式 */
         QGroupBox {
@@ -429,6 +361,9 @@ class UIStyles:
             background: none;
         }
         """
+
+        # 组合所有样式并返回
+        return "\n".join(base_styles) + main_window_styles
     
     @staticmethod
     def get_category_title_style():
@@ -445,15 +380,30 @@ class UIStyles:
         """
     
     @staticmethod
+    def get_button_style_with_margin(margin_direction: str = "bottom", margin_size: str = "4px"):
+        """获取带边距的按钮样式
+
+        Args:
+            margin_direction: 边距方向 ("top", "bottom", "left", "right")
+            margin_size: 边距大小 (如 "4px")
+        """
+        base_style = UIStyles.get_base_button_style()
+        return base_style + f"""
+            QPushButton {{
+                margin-{margin_direction}: {margin_size};
+            }}
+        """
+
+    @staticmethod
     def get_primary_button_style():
         """获取主要按钮样式"""
-        base_style = UIStyles.get_base_button_style()
-        return base_style + """
-            QPushButton {
-                margin-bottom: 4px;
-            }
-        """
-    
+        return UIStyles.get_button_style_with_margin("bottom", "4px")
+
+    @staticmethod
+    def get_save_button_style():
+        """获取保存按钮样式"""
+        return UIStyles.get_button_style_with_margin("top", "4px")
+
     @staticmethod
     def get_group_box_style():
         """获取分组框样式"""
@@ -474,12 +424,12 @@ class UIStyles:
                 background-color: #1e1e1e;
             }
         """
-    
+
     @staticmethod
     def get_form_label_style():
         """获取表单标签样式"""
         return "QLabel { font-weight: 500; color: #cccccc; }"
-    
+
     @staticmethod
     def get_content_label_style():
         """获取内容标签样式"""
@@ -491,16 +441,6 @@ class UIStyles:
                 padding: 4px 0px;
                 border-bottom: 1px solid #3f3f46;
                 margin-bottom: 4px;
-            }
-        """
-    
-    @staticmethod
-    def get_save_button_style():
-        """获取保存按钮样式"""
-        base_style = UIStyles.get_base_button_style()
-        return base_style + """
-            QPushButton {
-                margin-top: 4px;
             }
         """
 

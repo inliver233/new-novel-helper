@@ -15,9 +15,10 @@ from .ui_components import UIComponents
 from .enhanced_category_tree import EnhancedCategoryTree
 from .entry_window_manager import EntryWindowManager
 from .context_menu_helper import ContextMenuHelper
-from .status_indicator import StatusIndicatorBar, SaveStatusIndicator
+from .status_indicator import StatusIndicatorBar, StatusType
 from ..utils.logger import LoggerConfig, log_exception
-from ..utils.time_utils import format_datetime_chinese, format_word_count, format_tags_display, count_text_stats
+from ..utils.time_utils import format_datetime_chinese
+from ..utils.text_utils import format_word_count, format_tags_display, count_text_stats
 
 class MainWindow(QMainWindow):
     """应用程序的主窗口"""
@@ -359,7 +360,6 @@ class MainWindow(QMainWindow):
 
         # 更新状态指示器
         if self.config_manager.is_status_indicators_enabled():
-            from .status_indicator import StatusType
             self.status_indicator_bar.update_indicator("save_status", StatusType.MODIFIED, "未保存")
 
         # 启动自动保存定时器
@@ -415,15 +415,24 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "错误", f"创建条目失败: {e}")
 
-    def save_current_entry(self):
-        """保存当前条目"""
+    def _perform_save(self, is_auto_save: bool = False) -> bool:
+        """执行保存操作的核心逻辑
+
+        Args:
+            is_auto_save: 是否为自动保存
+
+        Returns:
+            bool: 保存是否成功
+        """
         if not self.current_entry or not self.current_category_path:
-            return
+            return False
 
         # 显示保存中状态
         if self.config_manager.is_status_indicators_enabled():
-            from .status_indicator import StatusType
-            self.status_indicator_bar.update_indicator("save_status", StatusType.SAVING, "保存中...")
+            if is_auto_save:
+                self.status_indicator_bar.update_indicator("auto_save", StatusType.SAVING, "自动保存中...")
+            else:
+                self.status_indicator_bar.update_indicator("save_status", StatusType.SAVING, "保存中...")
 
         try:
             # 获取编辑器中的内容
@@ -461,102 +470,69 @@ class MainWindow(QMainWindow):
             )
 
             self.is_content_modified = False
-            self.update_status_bar()
-            self.show_operation_result("保存条目", True, self.current_entry.title)
 
-            # 显示保存成功状态，隐藏所有其他状态
-            if self.config_manager.is_status_indicators_enabled():
-                from .status_indicator import StatusType
-                # 隐藏修改状态和自动保存状态
-                self.status_indicator_bar.hide_indicator("auto_save")
-                # 显示保存成功状态
-                self.status_indicator_bar.update_indicator("save_status", StatusType.SAVED, "已保存")
-                self.status_indicator_bar.show_indicator("save_status", 2000)  # 2秒后自动隐藏
+            # 根据保存类型处理后续逻辑
+            if is_auto_save:
+                self.logger.info(f"自动保存成功: {self.current_entry.title}")
+                # 显示自动保存成功状态，并隐藏修改状态
+                if self.config_manager.is_status_indicators_enabled():
+                    # 隐藏修改状态指示器
+                    self.status_indicator_bar.hide_indicator("save_status")
+                    # 显示自动保存成功状态
+                    self.status_indicator_bar.update_indicator("auto_save", StatusType.SAVED, "自动保存")
+                    self.status_indicator_bar.show_indicator("auto_save", 1500)  # 1.5秒后自动隐藏
+            else:
+                self.update_status_bar()
+                self.show_operation_result("保存条目", True, self.current_entry.title)
+                # 显示保存成功状态，隐藏所有其他状态
+                if self.config_manager.is_status_indicators_enabled():
+                    # 隐藏修改状态和自动保存状态
+                    self.status_indicator_bar.hide_indicator("auto_save")
+                    # 显示保存成功状态
+                    self.status_indicator_bar.update_indicator("save_status", StatusType.SAVED, "已保存")
+                    self.status_indicator_bar.show_indicator("save_status", 2000)  # 2秒后自动隐藏
+
+            return True
 
         except (FileNotFoundError, PermissionError, OSError) as e:
             error_msg = f"文件系统错误: {e}"
-            self.show_operation_result("保存条目", False, error_msg)
-            log_exception(self.logger, "保存条目", e)
-
-            # 显示保存错误状态
-            if self.config_manager.is_status_indicators_enabled():
-                from .status_indicator import StatusType
-                self.status_indicator_bar.update_indicator("save_status", StatusType.ERROR, "保存失败")
-
+            if is_auto_save:
+                self.logger.warning(f"自动保存失败: {e}")
+                if self.config_manager.is_status_indicators_enabled():
+                    self.status_indicator_bar.update_indicator("auto_save", StatusType.ERROR, "自动保存失败")
+                    self.status_indicator_bar.show_indicator("auto_save", 3000)  # 3秒后自动隐藏
+            else:
+                self.show_operation_result("保存条目", False, error_msg)
+                log_exception(self.logger, "保存条目", e)
+                # 显示保存错误状态
+                if self.config_manager.is_status_indicators_enabled():
+                    self.status_indicator_bar.update_indicator("save_status", StatusType.ERROR, "保存失败")
+            return False
         except (json.JSONDecodeError, ValueError) as e:
             error_msg = f"数据格式错误: {e}"
-            self.show_operation_result("保存条目", False, error_msg)
-            log_exception(self.logger, "保存条目", e)
+            if is_auto_save:
+                self.logger.warning(f"自动保存失败: {e}")
+                if self.config_manager.is_status_indicators_enabled():
+                    self.status_indicator_bar.update_indicator("auto_save", StatusType.ERROR, "自动保存失败")
+                    self.status_indicator_bar.show_indicator("auto_save", 3000)  # 3秒后自动隐藏
+            else:
+                self.show_operation_result("保存条目", False, error_msg)
+                log_exception(self.logger, "保存条目", e)
+                # 显示保存错误状态
+                if self.config_manager.is_status_indicators_enabled():
+                    self.status_indicator_bar.update_indicator("save_status", StatusType.ERROR, "保存失败")
+            return False
 
-            # 显示保存错误状态
-            if self.config_manager.is_status_indicators_enabled():
-                from .status_indicator import StatusType
-                self.status_indicator_bar.update_indicator("save_status", StatusType.ERROR, "保存失败")
+    def save_current_entry(self):
+        """保存当前条目"""
+        return self._perform_save(is_auto_save=False)
 
     def auto_save_current_entry(self):
         """自动保存当前条目"""
         if not self.is_content_modified or not self.current_entry or not self.current_category_path:
             return
 
-        try:
-            # 显示自动保存中状态
-            if self.config_manager.is_status_indicators_enabled():
-                from .status_indicator import StatusType
-                self.status_indicator_bar.update_indicator("auto_save", StatusType.SAVING, "自动保存中...")
-
-            # 获取编辑器中的内容
-            title = self.title_edit.text().strip()
-            content = self.content_editor.toPlainText()
-            tags_text = self.tags_edit.text().strip()
-            tags = [tag.strip() for tag in tags_text.split(",") if tag.strip()]
-
-            if not title:
-                title = self.current_entry.title
-
-            # 更新条目
-            self.business_manager.update_entry(
-                self.current_category_path,
-                self.current_entry.uuid,
-                title=title,
-                content=content,
-                tags=tags
-            )
-
-            # 更新当前条目对象
-            self.current_entry.update_content(title=title, content=content, tags=tags)
-
-            # 更新条目列表中的标题
-            current_item = self.entry_list.currentItem()
-            if current_item:
-                current_item.setText(title)
-
-            # 同步到独立窗口
-            self.entry_window_manager.sync_entry_update(
-                self.current_category_path,
-                self.current_entry.uuid,
-                self.current_entry
-            )
-
-            self.is_content_modified = False
-            self.logger.info(f"自动保存成功: {self.current_entry.title}")
-
-            # 显示自动保存成功状态，并隐藏修改状态
-            if self.config_manager.is_status_indicators_enabled():
-                from .status_indicator import StatusType
-                # 隐藏修改状态指示器
-                self.status_indicator_bar.hide_indicator("save_status")
-                # 显示自动保存成功状态
-                self.status_indicator_bar.update_indicator("auto_save", StatusType.SAVED, "自动保存")
-                self.status_indicator_bar.show_indicator("auto_save", 1500)  # 1.5秒后自动隐藏
-
-        except Exception as e:
-            self.logger.warning(f"自动保存失败: {e}")
-
-            # 显示自动保存错误状态
-            if self.config_manager.is_status_indicators_enabled():
-                from .status_indicator import StatusType
-                self.status_indicator_bar.update_indicator("auto_save", StatusType.ERROR, "自动保存失败")
-                self.status_indicator_bar.show_indicator("auto_save", 3000)  # 3秒后自动隐藏
+        self._perform_save(is_auto_save=True)
 
     def refresh_category_tree_display(self):
         """刷新分类树显示的辅助方法"""
@@ -675,7 +651,7 @@ class MainWindow(QMainWindow):
 
         except (FileNotFoundError, PermissionError, OSError) as e:
             QMessageBox.critical(self, "错误", f"无法访问条目文件: {e}")
-        except Exception as e:
+        except (RuntimeError, AttributeError, TypeError) as e:
             QMessageBox.critical(self, "错误", f"打开条目窗口失败: {e}")
 
     def on_entry_updated_in_window(self, category_path: str, entry_uuid: str, entry):
@@ -944,7 +920,7 @@ class MainWindow(QMainWindow):
             # 恢复按钮状态
             if self.adjust_action:
                 self.adjust_action.setChecked(not checked)
-        except Exception as e:
+        except (RuntimeError, TypeError) as e:
             QMessageBox.warning(self, "错误", f"切换拖拽模式失败: {e}")
             # 恢复按钮状态
             if self.adjust_action:
@@ -957,7 +933,7 @@ class MainWindow(QMainWindow):
             dialog.settings_changed.connect(self.on_settings_changed)
             dialog.exec()
 
-        except Exception as e:
+        except (ImportError, AttributeError, RuntimeError) as e:
             self.logger.error(f"打开设置对话框失败: {e}")
             QMessageBox.critical(self, "错误", f"打开设置对话框失败: {e}")
 

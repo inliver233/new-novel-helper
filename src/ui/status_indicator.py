@@ -3,11 +3,10 @@
 包括保存状态、同步状态等指示器
 """
 
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QFrame
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QPropertyAnimation, QEasingCurve
-from PyQt6.QtGui import QPixmap, QPainter, QColor, QFont
+from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QFont
 from enum import Enum
-from typing import Optional
 
 
 class StatusType(Enum):
@@ -207,64 +206,4 @@ class StatusIndicatorBar(QWidget):
             self.remove_indicator(key)
 
 
-class SaveStatusIndicator(StatusIndicator):
-    """专用的保存状态指示器"""
-    
-    def __init__(self, parent=None):
-        super().__init__(StatusType.SAVED, "已保存", parent)
-        
-        # 自动隐藏定时器
-        self.hide_timer = QTimer()
-        self.hide_timer.timeout.connect(self.hide)
-        self.hide_timer.setSingleShot(True)
-    
-    def show_saved(self, auto_hide_delay: int = 2000):
-        """显示已保存状态"""
-        self.set_status(StatusType.SAVED, "已保存")
-        self.show()
-        
-        if auto_hide_delay > 0:
-            self.hide_timer.start(auto_hide_delay)
-    
-    def show_saving(self):
-        """显示正在保存状态"""
-        self.set_status(StatusType.SAVING, "保存中...")
-        self.show()
-        self.hide_timer.stop()
-    
-    def show_modified(self):
-        """显示已修改状态"""
-        self.set_status(StatusType.MODIFIED, "未保存")
-        self.show()
-        self.hide_timer.stop()
-    
-    def show_error(self, message: str = "保存失败"):
-        """显示错误状态"""
-        self.set_status(StatusType.ERROR, message)
-        self.show()
-        self.hide_timer.stop()
 
-
-class SyncStatusIndicator(StatusIndicator):
-    """专用的同步状态指示器"""
-    
-    def __init__(self, parent=None):
-        super().__init__(StatusType.SYNCED, "已同步", parent)
-    
-    def show_synced(self, auto_hide_delay: int = 2000):
-        """显示已同步状态"""
-        self.set_status(StatusType.SYNCED, "已同步")
-        self.show()
-        
-        if auto_hide_delay > 0:
-            QTimer.singleShot(auto_hide_delay, self.hide)
-    
-    def show_syncing(self):
-        """显示正在同步状态"""
-        self.set_status(StatusType.SYNCING, "同步中...")
-        self.show()
-    
-    def show_sync_error(self, message: str = "同步失败"):
-        """显示同步错误状态"""
-        self.set_status(StatusType.ERROR, message)
-        self.show()

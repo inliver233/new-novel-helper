@@ -7,6 +7,9 @@ from ..models.entry import Entry
 class FileSystemManager:
     """负责所有文件系统操作，封装对分类（文件夹）和条目（JSON 文件）的 CRUD 逻辑。"""
 
+    # 类常量
+    ORDER_FILE_NAME = ".order.json"
+
     def __init__(self, base_path: str):
         self.base_path = base_path
         # 确保基础路径存在
@@ -391,7 +394,7 @@ class FileSystemManager:
 
     def get_order_file_path(self, category_path: str) -> str:
         """获取排序文件路径"""
-        return os.path.join(category_path, ".order.json")
+        return os.path.join(category_path, self.ORDER_FILE_NAME)
 
     def load_order_info(self, category_path: str) -> Dict[str, List[str]]:
         """加载分类的排序信息

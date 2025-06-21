@@ -12,6 +12,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QKeySequence
 from .ui_styles import UIStyles
 from .draggable_entry_list import DraggableEntryList
+from .status_indicator import StatusIndicatorBar
 
 
 class UIComponents:
@@ -144,7 +145,6 @@ class UIComponents:
         button_layout.addWidget(save_btn)
 
         # 状态指示器（移到保存按钮右侧）
-        from .status_indicator import StatusIndicatorBar
         status_indicator_bar = StatusIndicatorBar()
         button_layout.addWidget(status_indicator_bar)
 
