@@ -10,17 +10,17 @@ from typing import List, Dict, Any, Optional
 from ..data_access.file_system_manager import FileSystemManager
 from ..models.entry import Entry
 from ..utils.logger import LoggerConfig, log_exception
+from .search_strategy import SearchStrategy
 
 
-class SearchService:
+class SimpleSearchStrategy(SearchStrategy):
     """
-    搜索服务类，封装所有搜索相关的逻辑。
-    提供一个简化的接口来搜索条目。
+    一个简单的搜索策略，通过直接扫描文件系统来执行搜索。
     """
 
     def __init__(self, data_path: str, fs_manager: Optional[FileSystemManager] = None):
         """
-        初始化搜索服务。
+        初始化简单搜索策略。
 
         Args:
             data_path (str): 数据根目录的路径。
@@ -29,18 +29,26 @@ class SearchService:
         """
         self.data_path = data_path
         self.fs_manager = fs_manager or FileSystemManager(data_path)
-        self.logger = LoggerConfig.get_logger("search_service")
+        self.logger = LoggerConfig.get_logger("simple_search_strategy")
 
-    def search(self, query: str, search_in_title: bool = True,
-               search_in_content: bool = True, search_in_tags: bool = True) -> List[Dict[str, Any]]:
+    def build_index(self, **kwargs: Any) -> None:
+        """此策略不需要预先构建索引。"""
+        pass
+
+    def update_index(self, entry: Entry, **kwargs: Any) -> None:
+        """此策略不需要更新索引。"""
+        pass
+
+    def search(self, query: str, **kwargs: Any) -> List[Dict[str, Any]]:
         """
         在所有条目中执行不区分大小写的搜索。
 
         Args:
             query (str): 搜索关键词。
-            search_in_title (bool): 是否在标题中搜索。默认为 True。
-            search_in_content (bool): 是否在内容中搜索。默认为 True。
-            search_in_tags (bool): 是否在标签中搜索。默认为 True。
+            **kwargs: 包含搜索选项的字典，例如:
+                      search_in_title (bool): 是否在标题中搜索。
+                      search_in_content (bool): 是否在内容中搜索。
+                      search_in_tags (bool): 是否在标签中搜索。
 
         Returns:
             List[Dict[str, Any]]: 搜索结果列表。
@@ -48,6 +56,10 @@ class SearchService:
         """
         if not query or not query.strip():
             return []
+
+        search_in_title = kwargs.get('search_in_title', True)
+        search_in_content = kwargs.get('search_in_content', True)
+        search_in_tags = kwargs.get('search_in_tags', True)
 
         processed_query = query.strip().lower()
         results: List[Dict[str, Any]] = []
@@ -90,3 +102,39 @@ class SearchService:
                         log_exception(self.logger, f"搜索时解析文件 {file_path}", e)
                         continue
         return results
+
+
+class SearchService:
+    """
+    搜索服务类，作为策略管理器，将搜索任务委托给具体的搜索策略。
+    """
+
+    def __init__(self, strategy: SearchStrategy):
+        """
+        初始化搜索服务。
+
+        Args:
+            strategy (SearchStrategy): 用于执行搜索的策略实例。
+        """
+        self.strategy = strategy
+
+    def build_index(self, **kwargs: Any) -> None:
+        """构建搜索索引（委托给策略）。"""
+        self.strategy.build_index(**kwargs)
+
+    def update_index(self, entry: Entry, **kwargs: Any) -> None:
+        """更新搜索索引（委托给策略）。"""
+        self.strategy.update_index(entry, **kwargs)
+
+    def search(self, query: str, **kwargs: Any) -> List[Dict[str, Any]]:
+        """
+        执行搜索（委托给策略）。
+
+        Args:
+            query (str): 搜索关键词。
+            **kwargs: 传递给策略的其他搜索参数。
+
+        Returns:
+            List[Dict[str, Any]]: 搜索结果。
+        """
+        return self.strategy.search(query, **kwargs)

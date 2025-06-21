@@ -11,7 +11,6 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from ..core.business_manager import BusinessManager
 from .ui_styles import UIStyles
-from ..core.search_service import SearchService
 
 
 class SearchDialog(QDialog):
@@ -22,11 +21,6 @@ class SearchDialog(QDialog):
     def __init__(self, business_manager: BusinessManager, parent=None):
         super().__init__(parent)
         self.business_manager = business_manager
-        # 创建搜索服务实例，复用business_manager的文件系统管理器
-        self.search_service = SearchService(
-            business_manager.data_path,
-            business_manager.fs_manager
-        )
         self.search_results = []
 
         self.setWindowTitle("搜索条目")
@@ -190,9 +184,9 @@ class SearchDialog(QDialog):
 
         try:
             # 调用简化的搜索服务
-            self.search_results = self.search_service.search(
+            self.search_results = self.business_manager.search_service.search(
                 query,
-                search_in_title=True,  # 标题始终搜索
+                search_in_title=True,
                 search_in_content=search_in_content,
                 search_in_tags=search_in_tags
             )

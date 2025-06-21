@@ -10,6 +10,7 @@ from ..data_access.file_system_manager import FileSystemManager
 from ..models.entry import Entry
 from ..utils.logger import LoggerConfig, log_exception, log_file_operation
 from ..utils.file_utils import sanitize_filename, validate_filename
+from .search_service import SearchService, SimpleSearchStrategy
 
 
 class BusinessManager:
@@ -20,6 +21,10 @@ class BusinessManager:
         self.fs_manager = FileSystemManager(data_path)
         self.drag_mode_enabled = False  # 拖拽模式状态
         self.logger = LoggerConfig.get_logger("business_manager")
+
+        # 初始化搜索服务
+        self.search_strategy = SimpleSearchStrategy(self.data_path, self.fs_manager)
+        self.search_service = SearchService(self.search_strategy)
     
     # ===== 分类管理业务逻辑 =====
     
