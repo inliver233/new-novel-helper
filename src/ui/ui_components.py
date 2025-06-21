@@ -47,7 +47,7 @@ class UIComponents:
         entry_list = DraggableEntryList()
         entry_list.itemSelectionChanged.connect(main_window.on_entry_selection_changed)
         entry_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        entry_list.customContextMenuRequested.connect(main_window.on_entry_context_menu)
+        entry_list.customContextMenuRequested.connect(main_window.context_menu_helper.show_entry_context_menu)
         layout.addWidget(entry_list)
 
         return panel, entry_list

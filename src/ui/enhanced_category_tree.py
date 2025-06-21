@@ -7,6 +7,7 @@ import os
 from PyQt6.QtWidgets import QTreeWidget, QTreeWidgetItem, QMessageBox, QApplication
 from PyQt6.QtCore import Qt, QMimeData, QTimer
 from PyQt6.QtGui import QFont, QBrush, QColor, QDrag
+from .ui_styles import UIStyles
 
 
 class EnhancedCategoryTreeItem(QTreeWidgetItem):
@@ -61,70 +62,7 @@ class EnhancedCategoryTree(QTreeWidget):
         self.setAcceptDrops(False)
 
         # 设置样式
-        self.setStyleSheet(self.get_enhanced_tree_style())
-        
-    def get_enhanced_tree_style(self):
-        """获取增强的树样式"""
-        return """
-        QTreeWidget {
-            background-color: #252526;
-            color: #e0e0e0;
-            border: 1px solid #3f3f46;
-            border-radius: 4px;
-            selection-background-color: #37373d;
-            outline: none;
-            padding: 4px;
-            font-size: 9pt;
-            show-decoration-selected: 1;
-        }
-
-        QTreeWidget::item {
-            padding: 8px 6px;
-            border-radius: 3px;
-            margin: 1px 0px;
-            min-height: 26px;
-            border-left: 3px solid transparent;
-            background-color: transparent;
-        }
-
-        QTreeWidget::item:hover {
-            background-color: rgba(42, 45, 46, 0.8);
-            border-left: 3px solid #52525b;
-        }
-
-        QTreeWidget::item:selected {
-            background-color: rgba(55, 55, 61, 0.9);
-            color: #ffffff;
-            border-left: 3px solid #0e639c;
-            font-weight: 500;
-        }
-
-        QTreeWidget::item:selected:hover {
-            background-color: rgba(64, 64, 71, 0.9);
-            border-left: 3px solid #1177bb;
-        }
-
-        /* 自定义展开/折叠指示器 */
-        QTreeWidget::branch {
-            background-color: transparent;
-        }
-
-        QTreeWidget::branch:has-children:!has-siblings:closed,
-        QTreeWidget::branch:closed:has-children:has-siblings {
-            border-image: none;
-            image: none;
-            background-color: transparent;
-            width: 16px;
-        }
-
-        QTreeWidget::branch:open:has-children:!has-siblings,
-        QTreeWidget::branch:open:has-children:has-siblings {
-            border-image: none;
-            image: none;
-            background-color: transparent;
-            width: 16px;
-        }
-        """
+        self.setStyleSheet(UIStyles.get_enhanced_tree_style())
     
     def populate_from_data(self, category_data):
         """从分类数据填充树"""

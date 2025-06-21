@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from ..core.business_manager import BusinessManager
+from .ui_styles import UIStyles
 from ..core.search_service import SearchService
 
 
@@ -38,141 +39,33 @@ class SearchDialog(QDialog):
     def setup_styles(self):
         """设置搜索对话框样式"""
         # 设置字体
-        font = QFont("Segoe UI", 9)
+        font = UIStyles.get_application_font()
         self.setFont(font)
 
-        # 应用与主窗口相同的专业深色主题样式
-        style_sheet = """
-        QDialog {
-            background-color: #1e1e1e;
-            color: #e0e0e0;
-        }
-
-        QGroupBox {
-            color: #e0e0e0;
-            border: 1px solid #52525b;
-            border-radius: 4px;
-            margin-top: 8px;
-            padding-top: 4px;
-            font-weight: 500;
-            font-size: 10pt;
-        }
-
-        QGroupBox::title {
-            subcontrol-origin: margin;
-            left: 8px;
-            padding: 0 4px 0 4px;
-            background-color: #1e1e1e;
-            color: #cccccc;
-        }
-
-        QLineEdit {
-            background-color: #3c3c3c;
-            color: #e0e0e0;
-            border: 1px solid #52525b;
-            border-radius: 3px;
-            padding: 8px 10px;
-            font-size: 9pt;
-        }
-
-        QLineEdit:focus {
-            border-color: #0e639c;
-        }
-
-        QPushButton {
-            background-color: #0e639c;
-            color: #ffffff;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 3px;
-            font-weight: 500;
-            font-size: 9pt;
-        }
-
-        QPushButton:hover {
-            background-color: #1177bb;
-        }
-
-        QPushButton:pressed {
-            background-color: #0d5a8a;
-        }
-
-        QPushButton:disabled {
-            background-color: #3f3f46;
-            color: #6d6d6d;
-        }
-
-        QCheckBox {
-            color: #e0e0e0;
-            font-size: 9pt;
-        }
-
-        QCheckBox::indicator {
-            width: 14px;
-            height: 14px;
-            border-radius: 2px;
-            border: 1px solid #52525b;
-            background-color: #3c3c3c;
-        }
-
-        QCheckBox::indicator:checked {
-            background-color: #0e639c;
-            border-color: #0e639c;
-        }
-
-        QListWidget {
-            background-color: #252526;
-            color: #e0e0e0;
-            border: 1px solid #3f3f46;
-            border-radius: 4px;
-            selection-background-color: #37373d;
-            outline: none;
-            padding: 2px;
-        }
-
-        QListWidget::item {
-            padding: 8px;
-            border-radius: 2px;
-            margin: 1px 0px;
-        }
-
-        QListWidget::item:hover {
-            background-color: #2a2d2e;
-        }
-
-        QListWidget::item:selected {
-            background-color: #37373d;
-        }
-
-        QTextEdit {
-            background-color: #1e1e1e;
-            color: #e0e0e0;
-            border: 1px solid #52525b;
-            border-radius: 3px;
-            padding: 8px;
-            font-family: "Consolas", "Monaco", "Courier New", monospace;
-            font-size: 9pt;
-        }
-
-        QTextEdit:focus {
-            border-color: #0e639c;
-        }
-
-        QLabel {
-            color: #e0e0e0;
-            font-size: 9pt;
-        }
-
-        QSplitter::handle {
-            background-color: #3f3f46;
-            width: 1px;
-            height: 1px;
-        }
-
-        QSplitter::handle:hover {
-            background-color: #52525b;
-        }
-        """
+        # 组合所有需要的样式
+        style_sheet = (
+            UIStyles.get_dialog_style() +
+            UIStyles.get_base_group_box_style() +
+            UIStyles.get_search_input_style() +
+            UIStyles.get_base_button_style() +
+            UIStyles.get_base_checkbox_style() +
+            UIStyles.get_base_list_widget_style() +
+            UIStyles.get_preview_text_edit_style() +
+            """
+            QLabel {
+                color: #e0e0e0;
+                font-size: 9pt;
+            }
+            QSplitter::handle {
+                background-color: #3f3f46;
+                width: 1px;
+                height: 1px;
+            }
+            QSplitter::handle:hover {
+                background-color: #52525b;
+            }
+            """
+        )
 
         self.setStyleSheet(style_sheet)
 
@@ -198,19 +91,7 @@ class SearchDialog(QDialog):
         search_input_layout.addWidget(self.search_input)
 
         self.search_button = QPushButton("搜索")
-        self.search_button.setStyleSheet("""
-            QPushButton {
-                background-color: #0e639c;
-                font-weight: 500;
-                padding: 8px 16px;
-            }
-            QPushButton:hover {
-                background-color: #1177bb;
-            }
-            QPushButton:pressed {
-                background-color: #0d5a8a;
-            }
-        """)
+        self.search_button.setStyleSheet(UIStyles.get_primary_button_style())
         self.search_button.clicked.connect(self.perform_search)
         search_input_layout.addWidget(self.search_button)
 
@@ -264,16 +145,7 @@ class SearchDialog(QDialog):
         # 条目信息
         self.info_label = QLabel("选择一个搜索结果查看预览")
         self.info_label.setWordWrap(True)
-        self.info_label.setStyleSheet("""
-            QLabel {
-                background-color: #3c3c3c;
-                border: 1px solid #52525b;
-                border-radius: 3px;
-                padding: 8px;
-                font-size: 9pt;
-                color: #cccccc;
-            }
-        """)
+        self.info_label.setStyleSheet(UIStyles.get_info_label_style())
         preview_layout.addWidget(self.info_label)
 
         # 内容预览
@@ -295,41 +167,13 @@ class SearchDialog(QDialog):
         button_layout.addStretch()
 
         self.open_button = QPushButton("打开条目")
-        self.open_button.setStyleSheet("""
-            QPushButton {
-                background-color: #0e639c;
-                font-weight: 500;
-                padding: 8px 16px;
-            }
-            QPushButton:hover {
-                background-color: #1177bb;
-            }
-            QPushButton:pressed {
-                background-color: #0d5a8a;
-            }
-            QPushButton:disabled {
-                background-color: #3f3f46;
-                color: #6d6d6d;
-            }
-        """)
+        self.open_button.setStyleSheet(UIStyles.get_primary_button_style())
         self.open_button.clicked.connect(self.open_selected_entry)
         self.open_button.setEnabled(False)
         button_layout.addWidget(self.open_button)
 
         self.close_button = QPushButton("关闭")
-        self.close_button.setStyleSheet("""
-            QPushButton {
-                background-color: #6d6d6d;
-                font-weight: 500;
-                padding: 8px 16px;
-            }
-            QPushButton:hover {
-                background-color: #7d7d7d;
-            }
-            QPushButton:pressed {
-                background-color: #5d5d5d;
-            }
-        """)
+        self.close_button.setStyleSheet(UIStyles.get_secondary_button_style())
         self.close_button.clicked.connect(self.close)
         button_layout.addWidget(self.close_button)
 

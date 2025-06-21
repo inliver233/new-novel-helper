@@ -4,10 +4,12 @@
 """
 
 import os
+import json
 from typing import List, Dict, Any, Optional
 
 from ..data_access.file_system_manager import FileSystemManager
 from ..models.entry import Entry
+from ..utils.logger import LoggerConfig, log_exception
 
 
 class SearchService:
@@ -27,6 +29,7 @@ class SearchService:
         """
         self.data_path = data_path
         self.fs_manager = fs_manager or FileSystemManager(data_path)
+        self.logger = LoggerConfig.get_logger("search_service")
 
     def search(self, query: str, search_in_title: bool = True,
                search_in_content: bool = True, search_in_tags: bool = True) -> List[Dict[str, Any]]:
@@ -80,7 +83,10 @@ class SearchService:
                                     found_uuids.add(entry.uuid)
                                     break  # 找到一个匹配的标签就足够了
 
-                    except Exception as e:
-                        print(f"搜索时跳过损坏或无法读取的文件: {file_path} - {e}")
+                    except (FileNotFoundError, PermissionError, OSError) as e:
+                        log_exception(self.logger, f"搜索时访问文件 {file_path}", e)
+                        continue
+                    except (json.JSONDecodeError, KeyError, ValueError) as e:
+                        log_exception(self.logger, f"搜索时解析文件 {file_path}", e)
                         continue
         return results

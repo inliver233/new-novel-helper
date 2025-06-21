@@ -4,9 +4,12 @@
 """
 
 import os
+import json
 from typing import List, Optional, Dict
 from ..data_access.file_system_manager import FileSystemManager
 from ..models.entry import Entry
+from ..utils.logger import LoggerConfig, log_exception, log_file_operation
+from ..utils.file_utils import sanitize_filename, validate_filename
 
 
 class BusinessManager:
@@ -16,6 +19,7 @@ class BusinessManager:
         self.data_path = data_path
         self.fs_manager = FileSystemManager(data_path)
         self.drag_mode_enabled = False  # 拖拽模式状态
+        self.logger = LoggerConfig.get_logger("business_manager")
     
     # ===== 分类管理业务逻辑 =====
     
@@ -38,7 +42,7 @@ class BusinessManager:
             raise ValueError("分类名称不能为空")
         
         # 清理分类名称，移除不安全字符
-        safe_name = self._sanitize_filename(category_name.strip())
+        safe_name = sanitize_filename(category_name.strip())
         if not safe_name:
             raise ValueError("分类名称包含无效字符")
         
@@ -54,7 +58,7 @@ class BusinessManager:
         Returns:
             str: 重命名后的分类路径
         """
-        safe_name = self._sanitize_filename(new_name.strip())
+        safe_name = sanitize_filename(new_name.strip())
         if not safe_name:
             raise ValueError("分类名称包含无效字符")
         
@@ -271,25 +275,6 @@ class BusinessManager:
 
     # ===== 工具方法 =====
     
-    def _sanitize_filename(self, filename: str) -> str:
-        """清理文件名，移除不安全字符
-        
-        Args:
-            filename: 原始文件名
-            
-        Returns:
-            str: 清理后的文件名
-        """
-        # 移除或替换不安全字符
-        unsafe_chars = '<>:"/\\|?*'
-        for char in unsafe_chars:
-            filename = filename.replace(char, '_')
-        
-        # 移除前后空格和点
-        filename = filename.strip('. ')
-        
-        return filename
-    
     def get_statistics(self) -> Dict[str, int]:
         """获取统计信息
         
@@ -310,7 +295,13 @@ class BusinessManager:
                         file_path = os.path.join(root, file)
                         entry = self.fs_manager.get_entry(file_path)
                         total_words += entry.get_word_count()
-                    except Exception:
+                    except (FileNotFoundError, PermissionError, OSError) as e:
+                        # 跳过无法访问或损坏的文件
+                        log_exception(self.logger, f"统计时访问文件 {file_path}", e)
+                        continue
+                    except (json.JSONDecodeError, KeyError, ValueError) as e:
+                        # 跳过格式错误的JSON文件
+                        log_exception(self.logger, f"统计时解析文件 {file_path}", e)
                         continue
         
         return {

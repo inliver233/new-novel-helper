@@ -1,4 +1,5 @@
 import os
+import json
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QSplitter,
     QMenu, QInputDialog, QMessageBox, QListWidget, QListWidgetItem
@@ -11,6 +12,8 @@ from .ui_styles import UIStyles
 from .ui_components import UIComponents
 from .enhanced_category_tree import EnhancedCategoryTree
 from .entry_window_manager import EntryWindowManager
+from .context_menu_helper import ContextMenuHelper
+from ..utils.logger import LoggerConfig, log_exception
 
 class MainWindow(QMainWindow):
     """应用程序的主窗口"""
@@ -27,9 +30,15 @@ class MainWindow(QMainWindow):
         self.business_manager = BusinessManager(data_path)
         self.data_path = data_path
 
+        # 初始化日志记录器
+        self.logger = LoggerConfig.get_logger("main_window")
+
         # 初始化条目窗口管理器
         self.entry_window_manager = EntryWindowManager(self.business_manager)
         self.setup_entry_window_manager()
+
+        # 初始化上下文菜单辅助类
+        self.context_menu_helper = ContextMenuHelper(self)
 
         # 当前选中的条目
         self.current_entry = None
@@ -94,6 +103,9 @@ class MainWindow(QMainWindow):
         # 显示统计信息
         self.update_status_bar()
 
+        # 显示欢迎消息
+        self.show_status_message("LoreMaster 已就绪", 3000)
+
     def setup_entry_window_manager(self):
         """设置条目窗口管理器"""
         # 连接信号
@@ -109,12 +121,43 @@ class MainWindow(QMainWindow):
         # 设置主样式表
         self.setStyleSheet(UIStyles.get_main_stylesheet())
 
+    def show_status_message(self, message: str, timeout: int = 5000):
+        """在状态栏显示消息
+
+        Args:
+            message: 要显示的消息
+            timeout: 消息显示时间（毫秒），0表示永久显示
+        """
+        self.status_bar.showMessage(message, timeout)
+        if timeout > 0:
+            self.logger.info(f"状态栏消息: {message}")
+
+    def show_operation_result(self, operation: str, success: bool, details: str = ""):
+        """显示操作结果
+
+        Args:
+            operation: 操作名称
+            success: 是否成功
+            details: 详细信息
+        """
+        if success:
+            message = f"{operation}成功"
+            if details:
+                message += f": {details}"
+            self.show_status_message(message, 3000)
+        else:
+            message = f"{operation}失败"
+            if details:
+                message += f": {details}"
+            self.show_status_message(message, 5000)
+            self.logger.warning(f"操作失败 - {operation}: {details}")
+
     def setup_category_tree(self):
         """设置并填充分类树"""
         self.populate_category_tree()
 
         self.category_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.category_tree.customContextMenuRequested.connect(self.on_category_context_menu)
+        self.category_tree.customContextMenuRequested.connect(self.context_menu_helper.show_category_context_menu)
         self.category_tree.itemSelectionChanged.connect(self.on_category_selection_changed)
 
     def populate_category_tree(self):
@@ -122,16 +165,22 @@ class MainWindow(QMainWindow):
         try:
             category_data = self.business_manager.get_category_tree()
             self.category_tree.populate_from_data(category_data)
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"加载分类目录失败: {e}")
+        except (FileNotFoundError, PermissionError, OSError) as e:
+            QMessageBox.critical(self, "错误", f"无法访问分类目录: {e}")
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            QMessageBox.critical(self, "错误", f"分类数据格式错误: {e}")
 
     def on_category_selection_changed(self):
         """当分类选择变化时，更新条目列表"""
         try:
             if self.is_content_modified and self.current_entry:
                 self.save_current_entry()
-        except Exception as e:
-            print(f"切换分类时保存旧条目失败: {e}")
+        except (FileNotFoundError, PermissionError, OSError) as e:
+            self.show_operation_result("自动保存", False, f"文件系统错误: {e}")
+            log_exception(self.logger, "切换分类时自动保存", e)
+        except (json.JSONDecodeError, ValueError) as e:
+            self.show_operation_result("自动保存", False, f"数据格式错误: {e}")
+            log_exception(self.logger, "切换分类时自动保存", e)
 
         self.clear_editor()
         self.entry_list.clear()
@@ -167,8 +216,10 @@ class MainWindow(QMainWindow):
                 item = QListWidgetItem(entry.title)
                 item.setData(Qt.ItemDataRole.UserRole, entry.uuid)
                 self.entry_list.addItem(item)
-        except Exception as e:
-            QMessageBox.warning(self, "错误", f"加载条目列表失败: {e}")
+        except (FileNotFoundError, PermissionError, OSError) as e:
+            QMessageBox.warning(self, "错误", f"无法访问条目目录: {e}")
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            QMessageBox.warning(self, "错误", f"条目数据格式错误: {e}")
 
     def on_entry_selection_changed(self):
         """当条目选择变化时，更新内容编辑器"""
@@ -176,8 +227,12 @@ class MainWindow(QMainWindow):
             # 保存当前条目
             if self.is_content_modified and self.current_entry and self.current_category_path:
                 self.save_current_entry()
-        except Exception as e:
-            print(f"保存当前条目时出错: {e}")
+        except (FileNotFoundError, PermissionError, OSError) as e:
+            self.show_operation_result("自动保存", False, f"文件系统错误: {e}")
+            log_exception(self.logger, "切换条目时自动保存", e)
+        except (json.JSONDecodeError, ValueError) as e:
+            self.show_operation_result("自动保存", False, f"数据格式错误: {e}")
+            log_exception(self.logger, "切换条目时自动保存", e)
 
         current_item = self.entry_list.currentItem()
         if not current_item or not self.current_category_path:
@@ -189,8 +244,11 @@ class MainWindow(QMainWindow):
         try:
             self.current_entry = self.business_manager.get_entry(self.current_category_path, entry_uuid)
             self.load_entry_to_editor()
-        except Exception as e:
-            QMessageBox.warning(self, "错误", f"加载条目失败: {e}")
+        except (FileNotFoundError, PermissionError, OSError) as e:
+            QMessageBox.warning(self, "错误", f"无法访问条目文件: {e}")
+            self.clear_editor()
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            QMessageBox.warning(self, "错误", f"条目数据格式错误: {e}")
             self.clear_editor()
 
     def load_entry_to_editor(self):
@@ -267,6 +325,10 @@ class MainWindow(QMainWindow):
 
             QMessageBox.information(self, "成功", f"条目 '{title}' 创建成功")
 
+        except (FileNotFoundError, PermissionError, OSError) as e:
+            QMessageBox.critical(self, "错误", f"无法创建条目文件: {e}")
+        except (json.JSONDecodeError, ValueError) as e:
+            QMessageBox.critical(self, "错误", f"条目数据格式错误: {e}")
         except Exception as e:
             QMessageBox.critical(self, "错误", f"创建条目失败: {e}")
 
@@ -312,10 +374,25 @@ class MainWindow(QMainWindow):
 
             self.is_content_modified = False
             self.update_status_bar()
+            self.show_operation_result("保存条目", True, self.current_entry.title)
 
+        except (FileNotFoundError, PermissionError, OSError) as e:
+            error_msg = f"文件系统错误: {e}"
+            self.show_operation_result("保存条目", False, error_msg)
+            log_exception(self.logger, "保存条目", e)
+        except (json.JSONDecodeError, ValueError) as e:
+            error_msg = f"数据格式错误: {e}"
+            self.show_operation_result("保存条目", False, error_msg)
+            log_exception(self.logger, "保存条目", e)
+
+    def refresh_category_tree_display(self):
+        """刷新分类树显示的辅助方法"""
+        try:
+            self.populate_category_tree()
+            self.category_tree.refresh_all_appearances()
         except Exception as e:
-            print(f"保存条目失败: {e}")
-            # 不显示错误对话框，避免在切换时干扰用户
+            self.logger.error(f"刷新分类树显示失败: {e}")
+            self.show_operation_result("刷新分类树", False, str(e))
 
     def delete_current_entry(self):
         """删除当前条目"""
@@ -350,6 +427,8 @@ class MainWindow(QMainWindow):
 
                 QMessageBox.information(self, "成功", f"条目 '{entry_title}' 已删除")
 
+            except (FileNotFoundError, PermissionError, OSError) as e:
+                QMessageBox.critical(self, "错误", f"无法删除条目文件: {e}")
             except Exception as e:
                 QMessageBox.critical(self, "错误", f"删除条目失败: {e}")
 
@@ -402,40 +481,12 @@ class MainWindow(QMainWindow):
 
             QMessageBox.information(self, "成功", f"条目已重命名为 '{new_title.strip()}'")
 
+        except (FileNotFoundError, PermissionError, OSError) as e:
+            QMessageBox.critical(self, "错误", f"无法重命名条目文件: {e}")
         except Exception as e:
             QMessageBox.critical(self, "错误", f"重命名条目失败: {e}")
 
-    def on_entry_context_menu(self, point: QPoint):
-        """条目列表右键菜单"""
-        item = self.entry_list.itemAt(point)
 
-        menu = QMenu(self)
-
-        # 新建条目
-        new_entry_action = QAction("新建条目", self)
-        new_entry_action.triggered.connect(self.create_new_entry)
-        menu.addAction(new_entry_action)
-
-        if item:
-            # 如果右键点击在条目上，添加相关选项
-            menu.addSeparator()
-
-            # 在新窗口中打开
-            open_in_window_action = QAction("在新窗口中打开", self)
-            open_in_window_action.triggered.connect(lambda: self.open_entry_in_new_window(item))
-            menu.addAction(open_in_window_action)
-
-            menu.addSeparator()
-
-            rename_action = QAction("重命名条目", self)
-            rename_action.triggered.connect(self.rename_current_entry)
-            menu.addAction(rename_action)
-
-            delete_action = QAction("删除条目", self)
-            delete_action.triggered.connect(self.delete_current_entry)
-            menu.addAction(delete_action)
-
-        menu.exec(self.entry_list.viewport().mapToGlobal(point))
 
     def open_entry_in_new_window(self, item):
         """在新窗口中打开条目（右键菜单调用）"""
@@ -449,6 +500,8 @@ class MainWindow(QMainWindow):
             # 使用条目窗口管理器打开或聚焦窗口，激活窗口
             self.entry_window_manager.open_or_focus_entry(self.current_category_path, entry, activate=True)
 
+        except (FileNotFoundError, PermissionError, OSError) as e:
+            QMessageBox.critical(self, "错误", f"无法访问条目文件: {e}")
         except Exception as e:
             QMessageBox.critical(self, "错误", f"打开条目窗口失败: {e}")
 
@@ -485,6 +538,8 @@ class MainWindow(QMainWindow):
                         item.setText(entry.title)
                         break
 
+        except (AttributeError, ValueError) as e:
+            print(f"同步条目更新失败（数据错误）: {e}")
         except Exception as e:
             print(f"同步条目更新失败: {e}")
 
@@ -505,6 +560,8 @@ class MainWindow(QMainWindow):
                         self.entry_list.takeItem(i)
                         break
 
+        except (AttributeError, ValueError) as e:
+            print(f"同步条目删除失败（数据错误）: {e}")
         except Exception as e:
             print(f"同步条目删除失败: {e}")
 
@@ -518,34 +575,12 @@ class MainWindow(QMainWindow):
             if not self.current_category_path:
                  self.status_bar.showMessage(status_text)
 
+        except (FileNotFoundError, PermissionError, OSError):
+            self.status_bar.showMessage("无法访问数据目录")
         except Exception:
             self.status_bar.showMessage("就绪")
 
-    def on_category_context_menu(self, point: QPoint):
-        """当在分类树上右键单击时显示上下文菜单"""
-        menu = QMenu(self)
-        
-        new_category_action = QAction("新建根分类...", self)
-        new_category_action.triggered.connect(lambda: self.create_new_category(is_root=True))
-        menu.addAction(new_category_action)
 
-        selected_item = self.category_tree.itemAt(point)
-
-        if selected_item:
-            new_subcategory_action = QAction("新建子分类...", self)
-            new_subcategory_action.triggered.connect(lambda: self.create_new_category(is_root=False))
-            menu.addAction(new_subcategory_action)
-            
-            menu.addSeparator()
-            rename_action = QAction("重命名分类...", self)
-            rename_action.triggered.connect(self.rename_category)
-            menu.addAction(rename_action)
-
-            delete_action = QAction("删除分类", self)
-            delete_action.triggered.connect(self.delete_category)
-            menu.addAction(delete_action)
-
-        menu.exec(self.category_tree.viewport().mapToGlobal(point))
 
     def create_new_category(self, is_root: bool = False):
         """创建一个新的分类（文件夹）"""
@@ -563,11 +598,13 @@ class MainWindow(QMainWindow):
         if ok and category_name.strip():
             try:
                 self.business_manager.create_category(category_name.strip(), parent_path)
-                # 重新填充分类树以更新显示
-                self.populate_category_tree()
-                # 刷新所有项目的外观以确保图标正确显示
-                self.category_tree.refresh_all_appearances()
+                # 刷新分类树显示
+                self.refresh_category_tree_display()
                 QMessageBox.information(self, "成功", f"分类 '{category_name}' 创建成功")
+            except (FileExistsError, PermissionError, OSError) as e:
+                QMessageBox.critical(self, "错误", f"无法创建分类目录: {e}")
+            except ValueError as e:
+                QMessageBox.critical(self, "错误", f"分类名称无效: {e}")
             except Exception as e:
                 QMessageBox.critical(self, "错误", f"创建分类失败: {e}")
 
@@ -586,9 +623,12 @@ class MainWindow(QMainWindow):
         if ok and new_name.strip() and new_name.strip() != old_name:
             try:
                 self.business_manager.rename_category(old_path, new_name.strip())
-                self.populate_category_tree()
-                self.category_tree.refresh_all_appearances()
+                self.refresh_category_tree_display()
                 QMessageBox.information(self, "成功", f"分类已重命名为 '{new_name}'")
+            except (FileNotFoundError, PermissionError, OSError) as e:
+                QMessageBox.critical(self, "错误", f"无法重命名分类目录: {e}")
+            except ValueError as e:
+                QMessageBox.critical(self, "错误", f"分类名称无效: {e}")
             except Exception as e:
                 QMessageBox.critical(self, "错误", f"重命名分类失败: {e}")
 
@@ -620,13 +660,14 @@ class MainWindow(QMainWindow):
 
             if reply == QMessageBox.StandardButton.Yes:
                 self.business_manager.delete_category(path_to_delete, force=True)
-                self.populate_category_tree()
-                self.category_tree.refresh_all_appearances()
+                self.refresh_category_tree_display()
                 self.clear_editor()
                 self.entry_list.clear()
                 self.current_category_path = None
                 QMessageBox.information(self, "成功", f"分类 '{category_name}' 已删除")
 
+        except (FileNotFoundError, PermissionError, OSError) as e:
+            QMessageBox.critical(self, "错误", f"无法删除分类目录: {e}")
         except Exception as e:
             QMessageBox.critical(self, "错误", f"删除分类失败: {e}")
 
@@ -678,6 +719,8 @@ class MainWindow(QMainWindow):
             else:
                  QMessageBox.warning(self, "错误", f"在分类树中找不到路径: {category_path}")
 
+        except (FileNotFoundError, PermissionError, OSError) as e:
+            QMessageBox.warning(self, "错误", f"无法访问条目文件: {e}")
         except Exception as e:
             QMessageBox.warning(self, "错误", f"打开条目失败: {e}")
 
@@ -723,6 +766,11 @@ class MainWindow(QMainWindow):
             mode_text = "拖拽排序模式已开启" if checked else "拖拽排序模式已关闭"
             self.status_bar.showMessage(mode_text, 3000)  # 显示3秒
 
+        except (AttributeError, ValueError) as e:
+            QMessageBox.warning(self, "错误", f"切换拖拽模式失败（配置错误）: {e}")
+            # 恢复按钮状态
+            if self.adjust_action:
+                self.adjust_action.setChecked(not checked)
         except Exception as e:
             QMessageBox.warning(self, "错误", f"切换拖拽模式失败: {e}")
             # 恢复按钮状态
