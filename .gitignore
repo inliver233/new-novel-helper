@@ -105,3 +105,6 @@ settings.ini
 # Data directories (if they contain user-specific data)
 # Uncomment the following line if data folder contains user-specific content
 # data/
+
+# Reference projects (exclude from version control)
+参考项目/

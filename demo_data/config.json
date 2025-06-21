@@ -1,0 +1,62 @@
+{
+  "auto_save": {
+    "enabled": true,
+    "interval": 3000,
+    "show_indicator": true
+  },
+  "ui": {
+    "theme": "dark",
+    "font_size": 12,
+    "show_status_indicators": true
+  },
+  "editor": {
+    "word_wrap": true,
+    "show_line_numbers": false,
+    "auto_indent": true
+  },
+  "backup": {
+    "enabled": true,
+    "max_backups": 10,
+    "backup_interval": 300000
+  },
+  "ai_config": {
+    "rag_config": {
+      "api_key": "",
+      "base_url": "https://api.siliconflow.cn/v1",
+      "embedding_model": "bge-large-zh-v1.5",
+      "rerank_model": "bge-reranker-base",
+      "chat_model": "Qwen/Qwen2-7B-Instruct",
+      "rag_top_k_retrieval": 20,
+      "rag_top_k_rerank": 5
+    },
+    "chat_config": {
+      "api_key": "",
+      "base_url": "https://api.openai.com/v1",
+      "chat_model": "gpt-3.5-turbo",
+      "temperature": 0.7,
+      "max_tokens": 2000
+    },
+    "active_profile": "default",
+    "profiles": {
+      "default": {
+        "name": "默认配置",
+        "rag_config": {
+          "api_key": "",
+          "base_url": "https://api.siliconflow.cn/v1",
+          "embedding_model": "bge-large-zh-v1.5",
+          "rerank_model": "bge-reranker-base",
+          "chat_model": "Qwen/Qwen2-7B-Instruct",
+          "rag_top_k_retrieval": 20,
+          "rag_top_k_rerank": 5
+        },
+        "chat_config": {
+          "api_key": "",
+          "base_url": "https://api.openai.com/v1",
+          "chat_model": "gpt-3.5-turbo",
+          "temperature": 0.7,
+          "max_tokens": 2000
+        }
+      }
+    }
+  }
+}
