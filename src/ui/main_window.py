@@ -31,6 +31,9 @@ class MainWindow(QMainWindow):
         self.current_category_path = None
         self.is_content_modified = False
 
+        # 拖拽模式相关
+        self.adjust_action = None  # 调整按钮的引用
+
         # 创建菜单栏和工具栏
         UIComponents.create_menu_bar(self)
         UIComponents.create_tool_bar(self)
@@ -56,6 +59,7 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(category_title)
 
         self.category_tree = EnhancedCategoryTree()
+        self.category_tree.set_business_manager(self.business_manager)
         self.setup_category_tree()
         left_layout.addWidget(self.category_tree)
 
@@ -63,6 +67,7 @@ class MainWindow(QMainWindow):
 
         # 中间：条目列表面板
         middle_panel, self.entry_list = UIComponents.create_entry_panel(self)
+        self.entry_list.set_business_manager(self.business_manager)
         splitter.addWidget(middle_panel)
 
         # 右侧：内容编辑器面板
@@ -128,8 +133,12 @@ class MainWindow(QMainWindow):
 
         selected_item = selected_items[0]
         self.current_category_path = selected_item.data(0, Qt.ItemDataRole.UserRole)
+
+        # 设置条目列表的当前分类路径
+        self.entry_list.set_current_category_path(self.current_category_path)
+
         self.update_entry_list()
-        
+
         # 在状态栏显示完整路径
         self.status_bar.showMessage(f"当前路径: {self.current_category_path}")
 
@@ -576,3 +585,38 @@ class MainWindow(QMainWindow):
             if found_item:
                 return found_item
         return None
+
+    def toggle_drag_mode(self, checked: bool):
+        """切换拖拽排序模式"""
+        try:
+            # 更新业务管理器的拖拽模式状态
+            self.business_manager.set_drag_mode(checked)
+
+            # 更新分类树的拖拽功能
+            self.category_tree.set_drag_enabled(checked)
+
+            # 更新条目列表的拖拽功能
+            self.entry_list.set_drag_enabled(checked)
+
+            # 重新加载数据以应用新的排序
+            self.populate_category_tree()
+            self.update_entry_list()
+
+            # 更新按钮状态和提示
+            if self.adjust_action:
+                if checked:
+                    self.adjust_action.setText('调整 ✓')
+                    self.adjust_action.setToolTip('拖拽排序模式已开启，可以拖拽调整顺序')
+                else:
+                    self.adjust_action.setText('调整')
+                    self.adjust_action.setToolTip('开启/关闭拖拽排序模式')
+
+            # 在状态栏显示模式变化
+            mode_text = "拖拽排序模式已开启" if checked else "拖拽排序模式已关闭"
+            self.status_bar.showMessage(mode_text, 3000)  # 显示3秒
+
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"切换拖拽模式失败: {e}")
+            # 恢复按钮状态
+            if self.adjust_action:
+                self.adjust_action.setChecked(not checked)

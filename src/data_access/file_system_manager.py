@@ -118,12 +118,13 @@ class FileSystemManager:
         except OSError:
             return []
 
-    def get_category_tree(self, parent_path: str = None) -> List[Dict[str, Any]]:
+    def get_category_tree(self, parent_path: str = None, use_custom_order: bool = False) -> List[Dict[str, Any]]:
         """
         递归地获取分类目录树。
 
         Args:
             parent_path: 父路径，如果为None则从根目录开始
+            use_custom_order: 是否使用自定义排序
 
         Returns:
             List[Dict[str, Any]]: 一个代表目录树的列表，每个元素是一个字典，
@@ -131,10 +132,10 @@ class FileSystemManager:
         """
         if parent_path is None:
             parent_path = self.base_path
-        
-        return self._scan_directory_recursively(parent_path)
 
-    def _scan_directory_recursively(self, current_path: str) -> List[Dict[str, Any]]:
+        return self._scan_directory_recursively(parent_path, use_custom_order)
+
+    def _scan_directory_recursively(self, current_path: str, use_custom_order: bool = False) -> List[Dict[str, Any]]:
         """
         递归扫描目录以构建树的辅助方法。
         """
@@ -143,19 +144,43 @@ class FileSystemManager:
             return tree
 
         try:
-            for item in os.listdir(current_path):
+            # 获取所有子目录
+            all_items = [
+                item for item in os.listdir(current_path)
+                if os.path.isdir(os.path.join(current_path, item))
+            ]
+
+            # 根据是否使用自定义排序来决定顺序
+            if use_custom_order:
+                order_info = self.load_order_info(current_path)
+                ordered_categories = order_info.get("categories", [])
+
+                # 按照自定义顺序排列，未在排序列表中的项目放在最后
+                ordered_items = []
+                for cat_name in ordered_categories:
+                    if cat_name in all_items:
+                        ordered_items.append(cat_name)
+                        all_items.remove(cat_name)
+
+                # 添加剩余的项目（按字母顺序）
+                ordered_items.extend(sorted(all_items))
+                all_items = ordered_items
+            else:
+                # 使用默认的字母排序
+                all_items.sort()
+
+            for item in all_items:
                 path = os.path.join(current_path, item)
-                if os.path.isdir(path):
-                    node = {
-                        'name': item,
-                        'path': path,
-                        'children': self._scan_directory_recursively(path)
-                    }
-                    tree.append(node)
+                node = {
+                    'name': item,
+                    'path': path,
+                    'children': self._scan_directory_recursively(path, use_custom_order)
+                }
+                tree.append(node)
         except OSError:
             # 忽略权限错误等问题
             pass
-        
+
         return tree
 
     # ===== 条目（JSON文件）管理 =====
@@ -271,11 +296,12 @@ class FileSystemManager:
         except OSError as e:
             raise OSError(f"删除条目失败: {e}")
 
-    def list_entries_in_category(self, category_path: str) -> List[Entry]:
+    def list_entries_in_category(self, category_path: str, use_custom_order: bool = False) -> List[Entry]:
         """列出一个分类下的所有条目。
 
         Args:
             category_path: 分类路径
+            use_custom_order: 是否使用自定义排序
 
         Returns:
             List[Entry]: 条目对象列表
@@ -284,16 +310,38 @@ class FileSystemManager:
             return []
 
         entries = []
+        entry_dict = {}  # UUID -> Entry 的映射
+
         try:
+            # 首先加载所有条目
             for filename in os.listdir(category_path):
-                if filename.endswith('.json'):
+                if filename.endswith('.json') and not filename.startswith('.'):
                     file_path = os.path.join(category_path, filename)
                     try:
                         entry = self.get_entry(file_path)
-                        entries.append(entry)
+                        entry_dict[entry.uuid] = entry
                     except (json.JSONDecodeError, OSError):
                         # 跳过损坏的文件
                         continue
+
+            # 根据是否使用自定义排序来决定顺序
+            if use_custom_order:
+                order_info = self.load_order_info(category_path)
+                ordered_uuids = order_info.get("entries", [])
+
+                # 按照自定义顺序排列
+                for uuid_str in ordered_uuids:
+                    if uuid_str in entry_dict:
+                        entries.append(entry_dict[uuid_str])
+                        del entry_dict[uuid_str]
+
+                # 添加剩余的条目（按标题排序）
+                remaining_entries = sorted(entry_dict.values(), key=lambda e: e.title)
+                entries.extend(remaining_entries)
+            else:
+                # 使用默认的标题排序
+                entries = sorted(entry_dict.values(), key=lambda e: e.title)
+
         except OSError:
             pass
 
@@ -338,3 +386,99 @@ class FileSystemManager:
             str: 条目文件路径
         """
         return os.path.join(category_path, f"{entry_uuid}.json")
+
+    # ===== 排序管理 =====
+
+    def get_order_file_path(self, category_path: str) -> str:
+        """获取排序文件路径"""
+        return os.path.join(category_path, ".order.json")
+
+    def load_order_info(self, category_path: str) -> Dict[str, List[str]]:
+        """加载分类的排序信息
+
+        Args:
+            category_path: 分类路径
+
+        Returns:
+            Dict[str, List[str]]: 包含categories和entries排序的字典
+        """
+        order_file = self.get_order_file_path(category_path)
+
+        if not os.path.exists(order_file):
+            # 如果没有排序文件，返回默认排序（按名称排序）
+            return self._generate_default_order(category_path)
+
+        try:
+            with open(order_file, 'r', encoding='utf-8') as f:
+                order_data = json.load(f)
+
+            # 确保数据格式正确
+            if not isinstance(order_data, dict):
+                return self._generate_default_order(category_path)
+
+            return {
+                "categories": order_data.get("categories", []),
+                "entries": order_data.get("entries", [])
+            }
+        except (json.JSONDecodeError, OSError):
+            # 如果文件损坏，返回默认排序
+            return self._generate_default_order(category_path)
+
+    def save_order_info(self, category_path: str, categories_order: List[str], entries_order: List[str]):
+        """保存分类的排序信息
+
+        Args:
+            category_path: 分类路径
+            categories_order: 子分类名称的排序列表
+            entries_order: 条目UUID的排序列表
+        """
+        order_data = {
+            "version": 1,
+            "categories": categories_order,
+            "entries": entries_order
+        }
+
+        order_file = self.get_order_file_path(category_path)
+
+        try:
+            with open(order_file, 'w', encoding='utf-8') as f:
+                json.dump(order_data, f, ensure_ascii=False, indent=2)
+        except OSError as e:
+            raise OSError(f"保存排序信息失败: {e}")
+
+    def _generate_default_order(self, category_path: str) -> Dict[str, List[str]]:
+        """生成默认排序（按名称排序）
+
+        Args:
+            category_path: 分类路径
+
+        Returns:
+            Dict[str, List[str]]: 默认排序信息
+        """
+        categories = []
+        entries = []
+
+        if os.path.exists(category_path):
+            try:
+                # 获取子分类（按名称排序）
+                categories = sorted([
+                    item for item in os.listdir(category_path)
+                    if os.path.isdir(os.path.join(category_path, item))
+                ])
+
+                # 获取条目UUID（按文件名排序）
+                entry_files = [
+                    item for item in os.listdir(category_path)
+                    if item.endswith('.json') and not item.startswith('.')
+                ]
+                entries = sorted([
+                    os.path.splitext(filename)[0] for filename in entry_files
+                ])
+
+            except OSError:
+                pass
+
+        return {
+            "categories": categories,
+            "entries": entries
+        }

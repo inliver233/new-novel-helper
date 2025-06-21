@@ -11,10 +11,11 @@ from ..models.entry import Entry
 
 class BusinessManager:
     """业务逻辑管理器，封装应用的核心业务逻辑"""
-    
+
     def __init__(self, data_path: str):
         self.data_path = data_path
         self.fs_manager = FileSystemManager(data_path)
+        self.drag_mode_enabled = False  # 拖拽模式状态
     
     # ===== 分类管理业务逻辑 =====
     
@@ -71,11 +72,11 @@ class BusinessManager:
 
     def get_category_tree(self) -> List[Dict]:
         """获取完整的分类目录树
-        
+
         Returns:
             List[Dict]: 代表目录树的嵌套列表
         """
-        return self.fs_manager.get_category_tree()
+        return self.fs_manager.get_category_tree(use_custom_order=self.drag_mode_enabled)
     
     # ===== 条目管理业务逻辑 =====
     
@@ -159,14 +160,14 @@ class BusinessManager:
     
     def get_entries_in_category(self, category_path: str) -> List[Entry]:
         """获取分类下的所有条目
-        
+
         Args:
             category_path: 分类路径
-            
+
         Returns:
             List[Entry]: 条目列表
         """
-        return self.fs_manager.list_entries_in_category(category_path)
+        return self.fs_manager.list_entries_in_category(category_path, use_custom_order=self.drag_mode_enabled)
     
     def get_entry_titles_in_category(self, category_path: str) -> List[str]:
         """获取分类下所有条目的标题
@@ -178,9 +179,96 @@ class BusinessManager:
             List[str]: 条目标题列表
         """
         return self.fs_manager.get_entry_names_in_category(category_path)
-    
 
-    
+    # ===== 拖拽排序管理 =====
+
+    def set_drag_mode(self, enabled: bool):
+        """设置拖拽模式状态
+
+        Args:
+            enabled: 是否启用拖拽模式
+        """
+        self.drag_mode_enabled = enabled
+
+    def is_drag_mode_enabled(self) -> bool:
+        """检查拖拽模式是否启用
+
+        Returns:
+            bool: 拖拽模式状态
+        """
+        return self.drag_mode_enabled
+
+    def save_category_order(self, category_path: str, categories_order: List[str]):
+        """保存分类的排序
+
+        Args:
+            category_path: 分类路径
+            categories_order: 子分类名称的排序列表
+        """
+        # 获取当前的条目排序
+        order_info = self.fs_manager.load_order_info(category_path)
+        entries_order = order_info.get("entries", [])
+
+        # 保存新的排序
+        self.fs_manager.save_order_info(category_path, categories_order, entries_order)
+
+    def save_entries_order(self, category_path: str, entries_order: List[str]):
+        """保存条目的排序
+
+        Args:
+            category_path: 分类路径
+            entries_order: 条目UUID的排序列表
+        """
+        # 获取当前的分类排序
+        order_info = self.fs_manager.load_order_info(category_path)
+        categories_order = order_info.get("categories", [])
+
+        # 保存新的排序
+        self.fs_manager.save_order_info(category_path, categories_order, entries_order)
+
+    def move_category(self, source_path: str, target_parent_path: str, new_name: str = None) -> str:
+        """移动分类到新的父分类下
+
+        Args:
+            source_path: 源分类路径
+            target_parent_path: 目标父分类路径
+            new_name: 新名称（可选）
+
+        Returns:
+            str: 新的分类路径
+
+        Raises:
+            ValueError: 如果移动操作无效
+            OSError: 如果移动失败
+        """
+        import shutil
+
+        if not os.path.exists(source_path):
+            raise ValueError(f"源分类不存在: {source_path}")
+
+        if not os.path.exists(target_parent_path):
+            raise ValueError(f"目标父分类不存在: {target_parent_path}")
+
+        # 确定新名称
+        if new_name is None:
+            new_name = os.path.basename(source_path)
+
+        new_path = os.path.join(target_parent_path, new_name)
+
+        # 检查目标路径是否已存在
+        if os.path.exists(new_path):
+            raise ValueError(f"目标位置已存在同名分类: {new_name}")
+
+        # 检查是否试图移动到自己的子目录
+        if new_path.startswith(source_path + os.sep):
+            raise ValueError("不能将分类移动到自己的子目录中")
+
+        try:
+            shutil.move(source_path, new_path)
+            return new_path
+        except OSError as e:
+            raise OSError(f"移动分类失败: {e}")
+
     # ===== 工具方法 =====
     
     def _sanitize_filename(self, filename: str) -> str:

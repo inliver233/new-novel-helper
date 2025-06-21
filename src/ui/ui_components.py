@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QKeySequence
 from .ui_styles import UIStyles
+from .draggable_entry_list import DraggableEntryList
 
 
 class UIComponents:
@@ -43,7 +44,7 @@ class UIComponents:
         layout.addWidget(new_entry_btn)
 
         # 条目列表
-        entry_list = QListWidget()
+        entry_list = DraggableEntryList()
         entry_list.itemSelectionChanged.connect(main_window.on_entry_selection_changed)
         entry_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         entry_list.customContextMenuRequested.connect(main_window.on_entry_context_menu)
@@ -195,6 +196,19 @@ class UIComponents:
         search_action = QAction('搜索', main_window)
         search_action.triggered.connect(main_window.open_search_dialog)
         toolbar.addAction(search_action)
+
+        toolbar.addSeparator()
+
+        # 调整模式切换
+        adjust_action = QAction('调整', main_window)
+        adjust_action.setCheckable(True)
+        adjust_action.setChecked(False)
+        adjust_action.setToolTip('开启/关闭拖拽排序模式')
+        adjust_action.triggered.connect(main_window.toggle_drag_mode)
+        toolbar.addAction(adjust_action)
+
+        # 保存调整按钮的引用，以便后续更新状态
+        main_window.adjust_action = adjust_action
     
     @staticmethod
     def create_status_bar(main_window):
