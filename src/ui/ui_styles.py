@@ -380,3 +380,60 @@ class UIStyles:
                 background-color: #0d5a8a;
             }
         """
+
+    @staticmethod
+    def get_danger_button_style():
+        """获取危险按钮样式（删除等操作）"""
+        return """
+            QPushButton {
+                background-color: #dc3545;
+                color: #ffffff;
+                font-weight: 500;
+                padding: 8px 16px;
+                font-size: 9pt;
+                border: none;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #c82333;
+            }
+            QPushButton:pressed {
+                background-color: #bd2130;
+            }
+        """
+
+    @staticmethod
+    def get_line_edit_style():
+        """获取输入框样式"""
+        return """
+            QLineEdit {
+                background-color: #3c3c3c;
+                color: #e0e0e0;
+                border: 1px solid #52525b;
+                border-radius: 3px;
+                padding: 6px 8px;
+                font-size: 9pt;
+            }
+            QLineEdit:focus {
+                border-color: #0e639c;
+            }
+        """
+
+    @staticmethod
+    def get_text_edit_style():
+        """获取文本编辑器样式"""
+        return """
+            QTextEdit {
+                background-color: #1e1e1e;
+                color: #e0e0e0;
+                border: 1px solid #52525b;
+                border-radius: 3px;
+                padding: 8px;
+                font-family: "Consolas", "Monaco", "Courier New", monospace;
+                font-size: 10pt;
+                line-height: 1.4;
+            }
+            QTextEdit:focus {
+                border-color: #0e639c;
+            }
+        """

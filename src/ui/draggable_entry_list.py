@@ -3,9 +3,9 @@
 支持条目在同一分类内的重新排序
 """
 
-from PyQt6.QtWidgets import QListWidget, QListWidgetItem, QMessageBox
-from PyQt6.QtCore import Qt, QMimeData, QRect
-from PyQt6.QtGui import QDrag, QPainter, QPen, QColor
+from PyQt6.QtWidgets import QListWidget, QListWidgetItem, QMessageBox, QApplication
+from PyQt6.QtCore import Qt, QMimeData
+from PyQt6.QtGui import QDrag, QPainter, QPen, QColor, QCursor
 
 
 class DraggableEntryList(QListWidget):
@@ -19,55 +19,101 @@ class DraggableEntryList(QListWidget):
         self.drag_enabled = False
         self.business_manager = None
         self.current_category_path = None
+        self.entry_window_manager = None  # 条目窗口管理器引用
 
         # 插入位置指示器
         self.drop_indicator_row = -1  # 插入位置行号，-1表示无指示器
+
+        # 拖拽到窗口外检测
+        self.drag_start_position = None
         
     def setup_list(self):
         """设置列表的基本属性"""
-        # 初始化拖拽设置
-        self.setDragDropMode(QListWidget.DragDropMode.NoDragDrop)
+        # 初始化拖拽设置 - 默认为普通模式（可拖拽到窗口外）
+        self.setDragDropMode(QListWidget.DragDropMode.DragOnly)
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
+
+        # 启用自定义拖拽处理
+        self.setDragEnabled(True)
         
     def set_business_manager(self, business_manager):
         """设置业务管理器引用"""
         self.business_manager = business_manager
-        
+
     def set_current_category_path(self, category_path: str):
         """设置当前分类路径"""
         self.current_category_path = category_path
+
+    def set_entry_window_manager(self, entry_window_manager):
+        """设置条目窗口管理器引用"""
+        self.entry_window_manager = entry_window_manager
         
     def set_drag_enabled(self, enabled: bool):
-        """设置拖拽功能是否启用"""
+        """设置拖拽功能是否启用（调整模式）"""
         self.drag_enabled = enabled
         if enabled:
+            # 调整模式：只允许内部重排序，不允许拖拽到窗口外
             self.setDragDropMode(QListWidget.DragDropMode.InternalMove)
+            self.setDefaultDropAction(Qt.DropAction.MoveAction)
+            self.setDragEnabled(True)
         else:
-            self.setDragDropMode(QListWidget.DragDropMode.NoDragDrop)
+            # 普通模式：允许拖拽到窗口外创建新窗口
+            self.setDragDropMode(QListWidget.DragDropMode.DragOnly)
+            self.setDefaultDropAction(Qt.DropAction.MoveAction)
+            self.setDragEnabled(True)
     
     def startDrag(self, supportedActions):
         """开始拖拽操作"""
-        if not self.drag_enabled:
-            return
-            
         current_item = self.currentItem()
         if not current_item:
             return
-            
+
+        # 记录拖拽开始位置和条目信息
+        self.drag_start_position = QCursor.pos()
+        entry_uuid = current_item.data(Qt.ItemDataRole.UserRole)
+
         # 创建拖拽数据
         mime_data = QMimeData()
-        entry_uuid = current_item.data(Qt.ItemDataRole.UserRole)
         mime_data.setText(f"entry:{entry_uuid}")
-        
+
         # 创建拖拽对象
         drag = QDrag(self)
         drag.setMimeData(mime_data)
-        
+
         # 执行拖拽
         drop_action = drag.exec(supportedActions)
-        
+
+        # 检查拖拽结果
+        self.handle_drag_result(drop_action, entry_uuid)
+
+    def handle_drag_result(self, drop_action, entry_uuid: str):
+        """处理拖拽结果"""
+        # 获取主窗口引用，用于后续恢复层级
+        main_window = self.window()
+
+        # 只在普通模式（非调整模式）下允许拖拽到窗口外
+        if self.drag_enabled:
+            # 调整模式下，不处理拖拽到窗口外的情况
+            # 但仍需要确保主窗口保持层级
+            self.restore_main_window_level(main_window)
+            return
+
+        current_pos = QCursor.pos()
+        window_rect = main_window.geometry()
+
+        # 检查鼠标最终位置是否在主窗口外部
+        if not window_rect.contains(current_pos):
+            # 拖拽到窗口外部，创建独立窗口
+            self.handle_drag_outside(entry_uuid)
+            # 创建窗口后，恢复主窗口层级
+            self.restore_main_window_level(main_window)
+        elif drop_action == Qt.DropAction.IgnoreAction:
+            # 拖拽被取消或无效，但在窗口内部，可能是用户取消了操作
+            self.restore_main_window_level(main_window)
+
     def dragEnterEvent(self, event):
         """拖拽进入事件"""
+        # 只在调整模式下处理内部拖拽
         if self.drag_enabled and event.mimeData().hasText():
             text = event.mimeData().text()
             if text.startswith("entry:"):
@@ -279,3 +325,73 @@ class DraggableEntryList(QListWidget):
             # 绘制水平线
             painter.drawLine(0, y, self.viewport().width(), y)
             painter.end()
+
+    def handle_drag_outside(self, entry_uuid: str):
+        """处理拖拽到窗口外部的情况"""
+        if not self.entry_window_manager:
+            print("警告：条目窗口管理器未设置")
+            return
+
+        if not self.business_manager:
+            print("警告：业务管理器未设置")
+            return
+
+        if not self.current_category_path:
+            print("警告：当前分类路径未设置")
+            return
+
+        try:
+            # 获取条目数据
+            entry = self.business_manager.get_entry(self.current_category_path, entry_uuid)
+
+            # 获取主窗口引用
+            main_window = self.window()
+
+            # 创建独立窗口，但不激活（不抢夺焦点），并传递主窗口引用
+            window = self.entry_window_manager.create_entry_window(
+                self.current_category_path,
+                entry,
+                activate=False,
+                main_window=main_window
+            )
+
+            if window:
+                print(f"成功创建独立窗口：{entry.title}")
+            else:
+                print("创建独立窗口失败：窗口管理器返回None")
+
+        except Exception as e:
+            print(f"创建独立窗口时出错: {e}")
+            QMessageBox.warning(self, "错误", f"创建独立窗口失败: {e}")
+
+    def mousePressEvent(self, event):
+        """鼠标按下事件"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.drag_start_position = event.globalPosition().toPoint()
+        super().mousePressEvent(event)
+
+    def restore_main_window_level(self, main_window):
+        """恢复主窗口的显示层级"""
+        if main_window:
+            # 使用QTimer延迟执行，确保拖拽操作完全结束
+            from PyQt6.QtCore import QTimer
+            # 延迟时间稍微长一点，确保拖拽完全结束
+            QTimer.singleShot(200, lambda: self._do_restore_window_level(main_window))
+
+    def _do_restore_window_level(self, main_window):
+        """实际执行窗口层级恢复"""
+        try:
+            # 温和地恢复主窗口层级，不激活窗口
+            if main_window.isVisible() and not main_window.isMinimized():
+                # 只有当主窗口可见且未最小化时才提升层级
+                main_window.raise_()
+
+                # 确保窗口在正确的状态
+                current_state = main_window.windowState()
+                if current_state & Qt.WindowState.WindowMinimized:
+                    main_window.setWindowState(current_state & ~Qt.WindowState.WindowMinimized)
+
+        except Exception as e:
+            print(f"恢复主窗口层级时出错: {e}")
+
+

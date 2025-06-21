@@ -10,6 +10,7 @@ from .search_dialog import SearchDialog
 from .ui_styles import UIStyles
 from .ui_components import UIComponents
 from .enhanced_category_tree import EnhancedCategoryTree
+from .entry_window_manager import EntryWindowManager
 
 class MainWindow(QMainWindow):
     """应用程序的主窗口"""
@@ -25,6 +26,10 @@ class MainWindow(QMainWindow):
         # 初始化业务管理器
         self.business_manager = BusinessManager(data_path)
         self.data_path = data_path
+
+        # 初始化条目窗口管理器
+        self.entry_window_manager = EntryWindowManager(self.business_manager)
+        self.setup_entry_window_manager()
 
         # 当前选中的条目
         self.current_entry = None
@@ -68,6 +73,7 @@ class MainWindow(QMainWindow):
         # 中间：条目列表面板
         middle_panel, self.entry_list = UIComponents.create_entry_panel(self)
         self.entry_list.set_business_manager(self.business_manager)
+        self.entry_list.set_entry_window_manager(self.entry_window_manager)
         splitter.addWidget(middle_panel)
 
         # 右侧：内容编辑器面板
@@ -87,6 +93,12 @@ class MainWindow(QMainWindow):
 
         # 显示统计信息
         self.update_status_bar()
+
+    def setup_entry_window_manager(self):
+        """设置条目窗口管理器"""
+        # 连接信号
+        self.entry_window_manager.entry_updated_in_window.connect(self.on_entry_updated_in_window)
+        self.entry_window_manager.entry_deleted_in_window.connect(self.on_entry_deleted_in_window)
 
     def setup_styles(self):
         """设置应用程序样式"""
@@ -291,6 +303,13 @@ class MainWindow(QMainWindow):
             if current_item:
                 current_item.setText(title)
 
+            # 同步到独立窗口
+            self.entry_window_manager.sync_entry_update(
+                self.current_category_path,
+                self.current_entry.uuid,
+                self.current_entry
+            )
+
             self.is_content_modified = False
             self.update_status_bar()
 
@@ -325,6 +344,9 @@ class MainWindow(QMainWindow):
 
                 # 清空编辑器
                 self.clear_editor()
+
+                # 同步到独立窗口
+                self.entry_window_manager.sync_entry_deletion(self.current_category_path, entry_uuid)
 
                 QMessageBox.information(self, "成功", f"条目 '{entry_title}' 已删除")
 
@@ -371,6 +393,13 @@ class MainWindow(QMainWindow):
                 self.current_entry.title = new_title.strip()
                 self.title_edit.setText(new_title.strip())
 
+                # 同步到独立窗口
+                self.entry_window_manager.sync_entry_update(
+                    self.current_category_path,
+                    self.current_entry.uuid,
+                    self.current_entry
+                )
+
             QMessageBox.information(self, "成功", f"条目已重命名为 '{new_title.strip()}'")
 
         except Exception as e:
@@ -388,7 +417,14 @@ class MainWindow(QMainWindow):
         menu.addAction(new_entry_action)
 
         if item:
-            # 如果右键点击在条目上，添加重命名和删除选项
+            # 如果右键点击在条目上，添加相关选项
+            menu.addSeparator()
+
+            # 在新窗口中打开
+            open_in_window_action = QAction("在新窗口中打开", self)
+            open_in_window_action.triggered.connect(lambda: self.open_entry_in_new_window(item))
+            menu.addAction(open_in_window_action)
+
             menu.addSeparator()
 
             rename_action = QAction("重命名条目", self)
@@ -400,6 +436,77 @@ class MainWindow(QMainWindow):
             menu.addAction(delete_action)
 
         menu.exec(self.entry_list.viewport().mapToGlobal(point))
+
+    def open_entry_in_new_window(self, item):
+        """在新窗口中打开条目（右键菜单调用）"""
+        if not item or not self.current_category_path:
+            return
+
+        try:
+            entry_uuid = item.data(Qt.ItemDataRole.UserRole)
+            entry = self.business_manager.get_entry(self.current_category_path, entry_uuid)
+
+            # 使用条目窗口管理器打开或聚焦窗口，激活窗口
+            self.entry_window_manager.open_or_focus_entry(self.current_category_path, entry, activate=True)
+
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"打开条目窗口失败: {e}")
+
+    def on_entry_updated_in_window(self, category_path: str, entry_uuid: str, entry):
+        """处理来自独立窗口的条目更新"""
+        try:
+            # 如果更新的条目是当前正在编辑的条目，同步到主窗口
+            if (self.current_entry and
+                self.current_entry.uuid == entry_uuid and
+                self.current_category_path == category_path):
+
+                # 检查主窗口是否有未保存的修改
+                if self.is_content_modified:
+                    reply = QMessageBox.question(
+                        self,
+                        "数据冲突",
+                        "此条目在独立窗口中被修改了，是否要放弃当前修改并重新加载？",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No
+                    )
+
+                    if reply == QMessageBox.StandardButton.No:
+                        return
+
+                # 更新主窗口的条目数据
+                self.current_entry = entry
+                self.load_entry_to_editor()
+
+            # 更新条目列表中的标题（如果标题发生了变化）
+            if self.current_category_path == category_path:
+                for i in range(self.entry_list.count()):
+                    item = self.entry_list.item(i)
+                    if item.data(Qt.ItemDataRole.UserRole) == entry_uuid:
+                        item.setText(entry.title)
+                        break
+
+        except Exception as e:
+            print(f"同步条目更新失败: {e}")
+
+    def on_entry_deleted_in_window(self, category_path: str, entry_uuid: str):
+        """处理来自独立窗口的条目删除"""
+        try:
+            # 如果删除的是当前正在编辑的条目，清空编辑器
+            if (self.current_entry and
+                self.current_entry.uuid == entry_uuid and
+                self.current_category_path == category_path):
+                self.clear_editor()
+
+            # 从条目列表中移除
+            if self.current_category_path == category_path:
+                for i in range(self.entry_list.count()):
+                    item = self.entry_list.item(i)
+                    if item.data(Qt.ItemDataRole.UserRole) == entry_uuid:
+                        self.entry_list.takeItem(i)
+                        break
+
+        except Exception as e:
+            print(f"同步条目删除失败: {e}")
 
     def update_status_bar(self):
         """更新状态栏"""
@@ -536,13 +643,14 @@ class MainWindow(QMainWindow):
 
             if reply == QMessageBox.StandardButton.Save:
                 self.save_current_entry()
-                event.accept()
-            elif reply == QMessageBox.StandardButton.Discard:
-                event.accept()
-            else:
+            elif reply == QMessageBox.StandardButton.Cancel:
                 event.ignore()
-        else:
-            event.accept()
+                return
+
+        # 关闭所有独立条目窗口
+        self.entry_window_manager.close_all_windows()
+
+        event.accept()
 
     def open_search_dialog(self):
         """打开搜索对话框"""
