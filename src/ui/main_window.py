@@ -14,6 +14,7 @@ from .enhanced_category_tree import EnhancedCategoryTree
 from .entry_window_manager import EntryWindowManager
 from .context_menu_helper import ContextMenuHelper
 from ..utils.logger import LoggerConfig, log_exception
+from ..utils.time_utils import format_datetime_chinese, format_word_count, format_tags_display, count_text_stats
 
 class MainWindow(QMainWindow):
     """应用程序的主窗口"""
@@ -86,7 +87,7 @@ class MainWindow(QMainWindow):
         splitter.addWidget(middle_panel)
 
         # 右侧：内容编辑器面板
-        right_panel, self.title_edit, self.tags_edit, self.content_editor = UIComponents.create_editor_panel(self)
+        right_panel, self.title_edit, self.tags_edit, self.content_editor, self.details_info_label = UIComponents.create_editor_panel(self)
         splitter.addWidget(right_panel)
 
         # 设置分割器的初始大小比例和样式
@@ -266,6 +267,9 @@ class MainWindow(QMainWindow):
         self.tags_edit.setText(", ".join(self.current_entry.tags))
         self.content_editor.setText(self.current_entry.content)
 
+        # 更新详细信息显示
+        self.update_entry_details()
+
         # 恢复信号
         self.title_edit.blockSignals(False)
         self.tags_edit.blockSignals(False)
@@ -279,11 +283,57 @@ class MainWindow(QMainWindow):
         self.title_edit.clear()
         self.tags_edit.clear()
         self.content_editor.clear()
+        self.details_info_label.setText("请选择一个条目查看详细信息")
         self.is_content_modified = False
+
+    def update_entry_details(self):
+        """更新条目详细信息显示"""
+        if not self.current_entry:
+            self.details_info_label.setText("请选择一个条目查看详细信息")
+            return
+
+        # 获取条目信息
+        created_at = format_datetime_chinese(self.current_entry.get_created_at())
+        updated_at = format_datetime_chinese(self.current_entry.get_updated_at())
+
+        # 统计文本信息
+        stats = count_text_stats(self.current_entry.content)
+
+        # 构建详细信息文本
+        details_text = f"""创建: {created_at} | 更新: {updated_at}
+
+字数: {stats['chinese_chars']} | 英文: {stats['english_words']} | 符号: {stats['symbols']} | 字符: {stats['total_chars']} | 行数: {stats['lines']}"""
+
+        self.details_info_label.setText(details_text)
+
+    def update_entry_details_realtime(self):
+        """实时更新条目详细信息（主要是字数统计）"""
+        if not self.current_entry:
+            return
+
+        # 获取当前编辑器中的内容
+        current_content = self.content_editor.toPlainText()
+
+        # 获取条目信息
+        created_at = format_datetime_chinese(self.current_entry.get_created_at())
+        updated_at = format_datetime_chinese(self.current_entry.get_updated_at())
+
+        # 统计当前内容
+        stats = count_text_stats(current_content)
+
+        # 构建详细信息文本
+        details_text = f"""创建: {created_at} | 更新: {updated_at}
+
+字数: {stats['chinese_chars']} | 英文: {stats['english_words']} | 符号: {stats['symbols']} | 字符: {stats['total_chars']} | 行数: {stats['lines']}"""
+
+        self.details_info_label.setText(details_text)
 
     def on_content_changed(self):
         """内容变化时的处理"""
         self.is_content_modified = True
+        # 实时更新字数统计
+        if self.current_entry:
+            self.update_entry_details_realtime()
 
     def on_title_changed(self):
         """标题变化时的处理"""

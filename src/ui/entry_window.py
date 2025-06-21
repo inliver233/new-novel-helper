@@ -12,6 +12,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QAction, QKeySequence, QCloseEvent
 from ..models.entry import Entry
 from .ui_styles import UIStyles
+from ..utils.time_utils import format_datetime_chinese, count_text_stats
 
 
 class EntryWindow(QMainWindow):
@@ -139,7 +140,33 @@ class EntryWindow(QMainWindow):
         info_layout.addRow(tags_label, self.tags_edit)
         
         main_layout.addWidget(info_group)
-        
+
+        # 条目详细信息区域
+        details_group = QGroupBox("详细信息")
+        details_group.setStyleSheet(UIStyles.get_group_box_style())
+        details_layout = QVBoxLayout(details_group)
+        details_layout.setSpacing(8)
+        details_layout.setContentsMargins(16, 20, 16, 16)
+
+        # 创建详细信息标签
+        self.details_info_label = QLabel()
+        self.details_info_label.setStyleSheet("""
+            QLabel {
+                color: #888888;
+                font-size: 12px;
+                line-height: 1.4;
+                padding: 8px;
+                background-color: rgba(255, 255, 255, 0.05);
+                border-radius: 6px;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+            }
+        """)
+        self.details_info_label.setWordWrap(True)
+        self.details_info_label.setText("加载中...")
+        details_layout.addWidget(self.details_info_label)
+
+        main_layout.addWidget(details_group)
+
         # 内容编辑区域
         content_group = QGroupBox("内容")
         content_group.setStyleSheet(UIStyles.get_group_box_style())
@@ -186,12 +213,15 @@ class EntryWindow(QMainWindow):
         """加载条目内容到编辑器"""
         self.title_edit.setText(self.entry.title)
         self.content_editor.setPlainText(self.entry.content)
-        
+
         # 加载标签
         if self.entry.tags:
             tags_text = ", ".join(self.entry.tags)
             self.tags_edit.setText(tags_text)
-        
+
+        # 更新详细信息显示
+        self.update_entry_details()
+
         # 重置修改标志
         self.is_content_modified = False
         self.update_window_title()
@@ -207,7 +237,10 @@ class EntryWindow(QMainWindow):
         self.is_content_modified = True
         self.update_window_title()
         self.update_status_bar()
-        
+
+        # 实时更新详细信息
+        self.update_entry_details_realtime()
+
         # 启动自动保存定时器（3秒后保存）
         self.auto_save_timer.start(3000)
         
@@ -229,6 +262,48 @@ class EntryWindow(QMainWindow):
             status_text += " | 已保存"
             
         self.status_bar.showMessage(status_text)
+
+    def update_entry_details(self):
+        """更新条目详细信息显示"""
+        if not self.entry:
+            self.details_info_label.setText("加载中...")
+            return
+
+        # 获取条目信息
+        created_at = format_datetime_chinese(self.entry.get_created_at())
+        updated_at = format_datetime_chinese(self.entry.get_updated_at())
+
+        # 统计文本信息
+        stats = count_text_stats(self.entry.content)
+
+        # 构建详细信息文本
+        details_text = f"""创建: {created_at} | 更新: {updated_at}
+
+字数: {stats['chinese_chars']} | 英文: {stats['english_words']} | 符号: {stats['symbols']} | 字符: {stats['total_chars']} | 行数: {stats['lines']}"""
+
+        self.details_info_label.setText(details_text)
+
+    def update_entry_details_realtime(self):
+        """实时更新条目详细信息（主要是字数统计）"""
+        if not self.entry:
+            return
+
+        # 获取当前编辑器中的内容
+        current_content = self.content_editor.toPlainText()
+
+        # 获取条目信息
+        created_at = format_datetime_chinese(self.entry.get_created_at())
+        updated_at = format_datetime_chinese(self.entry.get_updated_at())
+
+        # 统计当前内容
+        stats = count_text_stats(current_content)
+
+        # 构建详细信息文本
+        details_text = f"""创建: {created_at} | 更新: {updated_at}
+
+字数: {stats['chinese_chars']} | 英文: {stats['english_words']} | 符号: {stats['symbols']} | 字符: {stats['total_chars']} | 行数: {stats['lines']}"""
+
+        self.details_info_label.setText(details_text)
 
     def save_entry(self):
         """保存条目"""

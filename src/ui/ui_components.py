@@ -85,6 +85,32 @@ class UIComponents:
 
         layout.addWidget(info_group)
 
+        # 条目详细信息区域
+        details_group = QGroupBox("详细信息")
+        details_group.setStyleSheet(UIStyles.get_group_box_style())
+        details_layout = QVBoxLayout(details_group)
+        details_layout.setSpacing(8)
+        details_layout.setContentsMargins(16, 20, 16, 16)
+
+        # 创建详细信息标签
+        details_info_label = QLabel()
+        details_info_label.setStyleSheet("""
+            QLabel {
+                color: #888888;
+                font-size: 12px;
+                line-height: 1.4;
+                padding: 8px;
+                background-color: rgba(255, 255, 255, 0.05);
+                border-radius: 6px;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+            }
+        """)
+        details_info_label.setWordWrap(True)
+        details_info_label.setText("请选择一个条目查看详细信息")
+        details_layout.addWidget(details_info_label)
+
+        layout.addWidget(details_group)
+
         # 内容编辑器区域
         content_frame = QFrame()
         content_frame.setFrameStyle(QFrame.Shape.NoFrame)
@@ -108,7 +134,7 @@ class UIComponents:
         save_btn.clicked.connect(main_window.save_current_entry)
         layout.addWidget(save_btn)
 
-        return panel, title_edit, tags_edit, content_editor
+        return panel, title_edit, tags_edit, content_editor, details_info_label
     
     @staticmethod
     def create_menu_bar(main_window):
