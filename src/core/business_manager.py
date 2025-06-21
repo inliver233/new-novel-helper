@@ -68,16 +68,14 @@ class BusinessManager:
         """
         self.fs_manager.delete_category(path, force)
     
-    def get_categories(self, parent_path: str = None) -> List[str]:
-        """获取分类列表
+
+    def get_category_tree(self) -> List[Dict]:
+        """获取完整的分类目录树
         
-        Args:
-            parent_path: 父分类路径
-            
         Returns:
-            List[str]: 分类名称列表
+            List[Dict]: 代表目录树的嵌套列表
         """
-        return self.fs_manager.list_categories(parent_path)
+        return self.fs_manager.get_category_tree()
     
     # ===== 条目管理业务逻辑 =====
     

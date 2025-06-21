@@ -175,6 +175,8 @@ class UIComponents:
         new_entry_action.triggered.connect(main_window.create_new_entry)
         toolbar.addAction(new_entry_action)
 
+        toolbar.addSeparator()
+
         # 保存
         save_action = QAction('保存', main_window)
         save_action.triggered.connect(main_window.save_current_entry)

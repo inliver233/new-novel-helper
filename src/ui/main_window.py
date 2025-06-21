@@ -1,14 +1,15 @@
+import os
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QSplitter,
-    QTreeView, QMenu, QInputDialog, QMessageBox, QListWidget,
-    QListWidgetItem
+    QMenu, QInputDialog, QMessageBox, QListWidget, QListWidgetItem
 )
-from PyQt6.QtCore import Qt, QDir, QPoint
-from PyQt6.QtGui import QFileSystemModel, QAction
+from PyQt6.QtCore import Qt, QPoint
+from PyQt6.QtGui import QAction
 from ..core.business_manager import BusinessManager
 from .search_dialog import SearchDialog
 from .ui_styles import UIStyles
 from .ui_components import UIComponents
+from .enhanced_category_tree import EnhancedCategoryTree
 
 class MainWindow(QMainWindow):
     """应用程序的主窗口"""
@@ -54,8 +55,8 @@ class MainWindow(QMainWindow):
         category_title = UIComponents.create_category_title_label()
         left_layout.addWidget(category_title)
 
-        self.category_tree = QTreeView()
-        self.setup_category_tree(data_path)
+        self.category_tree = EnhancedCategoryTree()
+        self.setup_category_tree()
         left_layout.addWidget(self.category_tree)
 
         splitter.addWidget(left_panel)
@@ -91,59 +92,46 @@ class MainWindow(QMainWindow):
         # 设置主样式表
         self.setStyleSheet(UIStyles.get_main_stylesheet())
 
+    def setup_category_tree(self):
+        """设置并填充分类树"""
+        self.populate_category_tree()
 
-
-
-
-
-
-
-
-
-
-    def setup_category_tree(self, data_path: str):
-        """设置分类树以显示文件系统目录"""
-        self.fs_model = QFileSystemModel()
-        self.fs_model.setRootPath(data_path)
-        self.fs_model.setFilter(QDir.Filter.NoDotAndDotDot | QDir.Filter.Dirs)
-
-        self.category_tree.setModel(self.fs_model)
-        self.category_tree.setRootIndex(self.fs_model.index(data_path))
-        
         self.category_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.category_tree.customContextMenuRequested.connect(self.on_category_context_menu)
-        
-        self.category_tree.selectionModel().selectionChanged.connect(self.on_category_selection_changed)
+        self.category_tree.itemSelectionChanged.connect(self.on_category_selection_changed)
 
-        for i in range(1, self.fs_model.columnCount()):
-            self.category_tree.hideColumn(i)
-    
-    def on_category_selection_changed(self, selected, deselected):
+    def populate_category_tree(self):
+        """使用从文件系统获取的数据填充分类树"""
+        try:
+            category_data = self.business_manager.get_category_tree()
+            self.category_tree.populate_from_data(category_data)
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"加载分类目录失败: {e}")
+
+    def on_category_selection_changed(self):
         """当分类选择变化时，更新条目列表"""
         try:
-            # 1. 保存对前一个条目的任何挂起更改
             if self.is_content_modified and self.current_entry:
                 self.save_current_entry()
         except Exception as e:
-            # 在后台打印错误，避免不必要地打扰用户
             print(f"切换分类时保存旧条目失败: {e}")
 
-        # 2. 重置UI和状态，这是修复BUG的关键步骤
-        # 在加载新分类的任何内容之前，清除编辑器和条目列表。
-        # 这可以防止使用新分类路径和旧条目ID的无效组合。
         self.clear_editor()
         self.entry_list.clear()
         
-        # 3. 获取新选择的分类路径
-        indexes = self.category_tree.selectionModel().selectedIndexes()
-        if not indexes:
+        selected_items = self.category_tree.selectedItems()
+        if not selected_items:
             self.current_category_path = None
+            self.status_bar.clearMessage() # 清除路径显示
+            self.update_status_bar() # 恢复默认统计信息
             return
 
-        # 4. 更新当前分类路径并加载其条目
-        selected_index = indexes[0]
-        self.current_category_path = self.fs_model.filePath(selected_index)
+        selected_item = selected_items[0]
+        self.current_category_path = selected_item.data(0, Qt.ItemDataRole.UserRole)
         self.update_entry_list()
+        
+        # 在状态栏显示完整路径
+        self.status_bar.showMessage(f"当前路径: {self.current_category_path}")
 
     def update_entry_list(self):
         """更新条目列表"""
@@ -409,19 +397,29 @@ class MainWindow(QMainWindow):
         try:
             stats = self.business_manager.get_statistics()
             status_text = f"分类: {stats['total_categories']} | 条目: {stats['total_entries']} | 总字数: {stats['total_words']}"
-            self.status_bar.showMessage(status_text)
+            
+            # 仅当没有选择分类时才显示全局统计信息
+            if not self.current_category_path:
+                 self.status_bar.showMessage(status_text)
+
         except Exception:
             self.status_bar.showMessage("就绪")
 
     def on_category_context_menu(self, point: QPoint):
         """当在分类树上右键单击时显示上下文菜单"""
         menu = QMenu(self)
-
-        new_category_action = QAction("新建分类...", self)
-        new_category_action.triggered.connect(self.create_new_category)
+        
+        new_category_action = QAction("新建根分类...", self)
+        new_category_action.triggered.connect(lambda: self.create_new_category(is_root=True))
         menu.addAction(new_category_action)
 
-        if self.category_tree.currentIndex().isValid():
+        selected_item = self.category_tree.itemAt(point)
+
+        if selected_item:
+            new_subcategory_action = QAction("新建子分类...", self)
+            new_subcategory_action.triggered.connect(lambda: self.create_new_category(is_root=False))
+            menu.addAction(new_subcategory_action)
+            
             menu.addSeparator()
             rename_action = QAction("重命名分类...", self)
             rename_action.triggered.connect(self.rename_category)
@@ -433,86 +431,84 @@ class MainWindow(QMainWindow):
 
         menu.exec(self.category_tree.viewport().mapToGlobal(point))
 
-    def create_new_category(self):
+    def create_new_category(self, is_root: bool = False):
         """创建一个新的分类（文件夹）"""
-        current_index = self.category_tree.currentIndex()
-
-        if not current_index.isValid():
-            parent_path = None
-        else:
-            parent_path = self.fs_model.filePath(current_index)
+        parent_path = None
+        if not is_root:
+            current_item = self.category_tree.currentItem()
+            if not current_item:
+                # 如果没有选中项，则在根目录创建
+                parent_path = None
+            else:
+                parent_path = current_item.data(0, Qt.ItemDataRole.UserRole)
 
         category_name, ok = QInputDialog.getText(self, "新建分类", "请输入分类名称:")
 
         if ok and category_name.strip():
             try:
                 self.business_manager.create_category(category_name.strip(), parent_path)
+                # 重新填充分类树以更新显示
+                self.populate_category_tree()
+                # 刷新所有项目的外观以确保图标正确显示
+                self.category_tree.refresh_all_appearances()
                 QMessageBox.information(self, "成功", f"分类 '{category_name}' 创建成功")
             except Exception as e:
                 QMessageBox.critical(self, "错误", f"创建分类失败: {e}")
 
     def rename_category(self):
         """重命名选中的分类"""
-        current_index = self.category_tree.currentIndex()
-        if not current_index.isValid():
+        current_item = self.category_tree.currentItem()
+        if not current_item:
             QMessageBox.warning(self, "提示", "请先选择要重命名的分类")
             return
 
-        old_path = self.fs_model.filePath(current_index)
-        old_name = self.fs_model.fileName(current_index)
+        old_path = current_item.data(0, Qt.ItemDataRole.UserRole)
+        old_name = current_item.text(0)
 
         new_name, ok = QInputDialog.getText(self, "重命名分类", "请输入新名称:", text=old_name)
 
         if ok and new_name.strip() and new_name.strip() != old_name:
             try:
                 self.business_manager.rename_category(old_path, new_name.strip())
+                self.populate_category_tree()
+                self.category_tree.refresh_all_appearances()
                 QMessageBox.information(self, "成功", f"分类已重命名为 '{new_name}'")
             except Exception as e:
                 QMessageBox.critical(self, "错误", f"重命名分类失败: {e}")
 
     def delete_category(self):
         """删除选中的分类"""
-        current_index = self.category_tree.currentIndex()
-        if not current_index.isValid():
+        current_item = self.category_tree.currentItem()
+        if not current_item:
             QMessageBox.warning(self, "提示", "请先选择要删除的分类")
             return
 
-        path_to_delete = self.fs_model.filePath(current_index)
-        category_name = self.fs_model.fileName(current_index)
-
-        # 检查分类是否为空
+        path_to_delete = current_item.data(0, Qt.ItemDataRole.UserRole)
+        category_name = current_item.text(0)
+        
         try:
+            # 检查分类是否为空
             entries = self.business_manager.get_entries_in_category(path_to_delete)
-            subcategories = self.business_manager.get_categories(path_to_delete)
+            subcategories = [d for d in os.listdir(path_to_delete) if os.path.isdir(os.path.join(path_to_delete, d))]
 
+            message = f"您确定要删除分类 '{category_name}' 吗？此操作无法撤销。"
             if entries or subcategories:
-                reply = QMessageBox.question(
-                    self,
-                    "确认删除",
-                    f"分类 '{category_name}' 不为空，包含 {len(entries)} 个条目和 {len(subcategories)} 个子分类。\n"
-                    f"您确定要永久删除该分类及其所有内容吗？此操作无法撤销。",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.No
-                )
-                force = True
-            else:
-                reply = QMessageBox.question(
-                    self,
-                    "确认删除",
-                    f"您确定要删除分类 '{category_name}' 吗？此操作无法撤销。",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.No
-                )
-                force = False
+                message = (f"分类 '{category_name}' 不为空，包含 {len(entries)} 个条目和 {len(subcategories)} 个子分类。\n"
+                           f"您确定要永久删除该分类及其所有内容吗？此操作无法撤销。")
+
+            reply = QMessageBox.question(
+                self, "确认删除", message,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
 
             if reply == QMessageBox.StandardButton.Yes:
-                self.business_manager.delete_category(path_to_delete, force)
-
-                # 清空编辑器和条目列表
+                self.business_manager.delete_category(path_to_delete, force=True)
+                self.populate_category_tree()
+                self.category_tree.refresh_all_appearances()
                 self.clear_editor()
                 self.entry_list.clear()
                 self.current_category_path = None
-
                 QMessageBox.information(self, "成功", f"分类 '{category_name}' 已删除")
 
         except Exception as e:
@@ -548,19 +544,35 @@ class MainWindow(QMainWindow):
     def open_entry_from_search(self, category_path: str, entry_uuid: str):
         """从搜索结果打开条目"""
         try:
-            # 在分类树中选择对应的分类
-            index = self.fs_model.index(category_path)
-            if index.isValid():
-                self.category_tree.setCurrentIndex(index)
+            # 1. 在QTreeWidget中找到并选择分类项
+            item_to_select = self._find_item_by_path(self.category_tree.invisibleRootItem(), category_path)
+            if item_to_select:
+                self.category_tree.setCurrentItem(item_to_select)
+                self.category_tree.scrollToItem(item_to_select) # 滚动到该项
                 self.current_category_path = category_path
                 self.update_entry_list()
 
-                # 在条目列表中选择对应的条目
+                # 2. 在条目列表中选择对应的条目
                 for i in range(self.entry_list.count()):
                     item = self.entry_list.item(i)
                     if item.data(Qt.ItemDataRole.UserRole) == entry_uuid:
                         self.entry_list.setCurrentItem(item)
                         break
+            else:
+                 QMessageBox.warning(self, "错误", f"在分类树中找不到路径: {category_path}")
 
         except Exception as e:
             QMessageBox.warning(self, "错误", f"打开条目失败: {e}")
+
+    def _find_item_by_path(self, parent_item, path: str):
+        """在树中递归查找具有给定路径的项"""
+        for i in range(parent_item.childCount()):
+            child = parent_item.child(i)
+            item_path = child.data(0, Qt.ItemDataRole.UserRole)
+            if item_path == path:
+                return child
+            # 递归搜索子项
+            found_item = self._find_item_by_path(child, path)
+            if found_item:
+                return found_item
+        return None

@@ -118,6 +118,46 @@ class FileSystemManager:
         except OSError:
             return []
 
+    def get_category_tree(self, parent_path: str = None) -> List[Dict[str, Any]]:
+        """
+        递归地获取分类目录树。
+
+        Args:
+            parent_path: 父路径，如果为None则从根目录开始
+
+        Returns:
+            List[Dict[str, Any]]: 一个代表目录树的列表，每个元素是一个字典，
+                                  包含 'name', 'path', 和 'children' 键。
+        """
+        if parent_path is None:
+            parent_path = self.base_path
+        
+        return self._scan_directory_recursively(parent_path)
+
+    def _scan_directory_recursively(self, current_path: str) -> List[Dict[str, Any]]:
+        """
+        递归扫描目录以构建树的辅助方法。
+        """
+        tree = []
+        if not os.path.exists(current_path):
+            return tree
+
+        try:
+            for item in os.listdir(current_path):
+                path = os.path.join(current_path, item)
+                if os.path.isdir(path):
+                    node = {
+                        'name': item,
+                        'path': path,
+                        'children': self._scan_directory_recursively(path)
+                    }
+                    tree.append(node)
+        except OSError:
+            # 忽略权限错误等问题
+            pass
+        
+        return tree
+
     # ===== 条目（JSON文件）管理 =====
 
     def create_entry(self, category_path: str, entry: Entry) -> str:
