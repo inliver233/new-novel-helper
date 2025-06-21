@@ -18,9 +18,10 @@ class EntryWindowManager(QObject):
     entry_updated_in_window = pyqtSignal(str, str, Entry)  # category_path, entry_uuid, entry
     entry_deleted_in_window = pyqtSignal(str, str)  # category_path, entry_uuid
     
-    def __init__(self, business_manager):
+    def __init__(self, business_manager, config_manager=None):
         super().__init__()
         self.business_manager = business_manager
+        self.config_manager = config_manager
         
         # 存储所有打开的条目窗口
         # key: window_id, value: EntryWindow
@@ -51,7 +52,8 @@ class EntryWindowManager(QObject):
                 business_manager=self.business_manager,
                 category_path=category_path,
                 entry=entry,
-                window_id=window_id
+                window_id=window_id,
+                config_manager=self.config_manager
             )
             
             # 连接窗口信号

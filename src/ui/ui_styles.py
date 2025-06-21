@@ -633,3 +633,117 @@ class UIStyles:
             width: 16px;
         }
         """
+
+    @staticmethod
+    def get_tab_widget_style():
+        """获取选项卡控件样式"""
+        return """
+            QTabWidget::pane {
+                border: 1px solid #52525b;
+                border-radius: 4px;
+                background-color: #1e1e1e;
+                padding: 4px;
+            }
+
+            QTabBar::tab {
+                background-color: #2d2d30;
+                color: #e0e0e0;
+                border: 1px solid #52525b;
+                border-bottom: none;
+                padding: 8px 16px;
+                margin-right: 2px;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                min-width: 80px;
+            }
+
+            QTabBar::tab:selected {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border-color: #0e639c;
+                font-weight: 500;
+            }
+
+            QTabBar::tab:hover:!selected {
+                background-color: #3f3f46;
+            }
+        """
+
+    @staticmethod
+    def get_dialog_button_style():
+        """获取对话框按钮样式"""
+        return """
+            QDialogButtonBox QPushButton {
+                min-width: 80px;
+                padding: 8px 16px;
+            }
+        """
+
+    @staticmethod
+    def get_spinbox_style():
+        """获取数字输入框样式"""
+        return """
+            QSpinBox {
+                background-color: #3c3c3c;
+                color: #e0e0e0;
+                border: 1px solid #52525b;
+                border-radius: 3px;
+                padding: 6px 8px;
+                font-size: 9pt;
+                min-width: 60px;
+            }
+
+            QSpinBox:focus {
+                border-color: #0e639c;
+            }
+
+            QSpinBox::up-button, QSpinBox::down-button {
+                background-color: #52525b;
+                border: none;
+                width: 16px;
+                border-radius: 2px;
+            }
+
+            QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+                background-color: #6d6d6d;
+            }
+
+            QSpinBox::up-arrow, QSpinBox::down-arrow {
+                width: 8px;
+                height: 8px;
+            }
+        """
+
+    @staticmethod
+    def get_checkbox_style():
+        """获取复选框样式"""
+        return """
+            QCheckBox {
+                color: #e0e0e0;
+                font-size: 9pt;
+                spacing: 8px;
+            }
+
+            QCheckBox::indicator {
+                width: 16px;
+                height: 16px;
+                border-radius: 3px;
+                border: 1px solid #52525b;
+                background-color: #3c3c3c;
+            }
+
+            QCheckBox::indicator:hover {
+                border-color: #6d6d6d;
+                background-color: #484851;
+            }
+
+            QCheckBox::indicator:checked {
+                background-color: #0e639c;
+                border-color: #0e639c;
+                image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iMTIiIHZpZXdCb3g9IjAgMCAxMiAxMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEwIDNMNC41IDguNUwyIDYiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+Cjwvc3ZnPgo=);
+            }
+
+            QCheckBox::indicator:checked:hover {
+                background-color: #1177bb;
+            }
+        """

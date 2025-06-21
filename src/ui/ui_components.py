@@ -128,13 +128,31 @@ class UIComponents:
 
         layout.addWidget(content_frame)
 
-        # 保存按钮
+        # 保存按钮和状态指示器区域
+        button_frame = QFrame()
+        button_frame.setFrameStyle(QFrame.Shape.NoFrame)
+        button_layout = QHBoxLayout(button_frame)
+        button_layout.setContentsMargins(0, 0, 0, 0)
+        button_layout.setSpacing(12)
+
+        # 保存按钮（适中宽度）
         save_btn = QPushButton("保存条目")
         save_btn.setStyleSheet(UIStyles.get_save_button_style())
         save_btn.clicked.connect(main_window.save_current_entry)
-        layout.addWidget(save_btn)
+        save_btn.setMaximumWidth(180)  # 调整按钮宽度，更协调
+        save_btn.setMinimumWidth(140)  # 设置最小宽度，确保按钮不会太小
+        button_layout.addWidget(save_btn)
 
-        return panel, title_edit, tags_edit, content_editor, details_info_label
+        # 状态指示器（移到保存按钮右侧）
+        from .status_indicator import StatusIndicatorBar
+        status_indicator_bar = StatusIndicatorBar()
+        button_layout.addWidget(status_indicator_bar)
+
+        button_layout.addStretch()  # 推到左侧
+
+        layout.addWidget(button_frame)
+
+        return panel, title_edit, tags_edit, content_editor, details_info_label, status_indicator_bar
     
     @staticmethod
     def create_menu_bar(main_window):
@@ -232,6 +250,14 @@ class UIComponents:
         adjust_action.setToolTip('开启/关闭拖拽排序模式')
         adjust_action.triggered.connect(main_window.toggle_drag_mode)
         toolbar.addAction(adjust_action)
+
+        toolbar.addSeparator()
+
+        # 设置按钮
+        settings_action = QAction('设置', main_window)
+        settings_action.setToolTip('打开应用程序设置')
+        settings_action.triggered.connect(main_window.open_settings_dialog)
+        toolbar.addAction(settings_action)
 
         # 保存调整按钮的引用，以便后续更新状态
         main_window.adjust_action = adjust_action

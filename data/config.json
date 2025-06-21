@@ -1,0 +1,22 @@
+{
+  "auto_save": {
+    "enabled": true,
+    "interval": 3000,
+    "show_indicator": true
+  },
+  "ui": {
+    "theme": "dark",
+    "font_size": 12,
+    "show_status_indicators": true
+  },
+  "editor": {
+    "word_wrap": true,
+    "show_line_numbers": true,
+    "auto_indent": true
+  },
+  "backup": {
+    "enabled": true,
+    "max_backups": 10,
+    "backup_interval": 300000
+  }
+}

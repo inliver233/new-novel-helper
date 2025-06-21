@@ -1,15 +1,15 @@
 {
   "uuid": "387fbc8a-4224-4822-8da9-5e30c10bee55",
   "title": "新的条目",
-  "content": "世界书里的新条目",
+  "content": "世界书里的新条目\n11",
   "tags": [
     "new",
     "测试"
   ],
   "metadata": {
     "created_at": "2025-06-21T07:20:02.532248+00:00",
-    "updated_at": "2025-06-21T07:20:30.277237+00:00",
-    "word_count": 8
+    "updated_at": "2025-06-21T13:18:18.812304+00:00",
+    "word_count": 11
   },
   "attachments": [],
   "version": 1

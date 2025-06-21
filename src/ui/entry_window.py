@@ -23,14 +23,15 @@ class EntryWindow(QMainWindow):
     entry_deleted = pyqtSignal(str, str)  # category_path, entry_uuid
     window_closed = pyqtSignal(str)  # window_id
     
-    def __init__(self, business_manager, category_path: str, entry: Entry, window_id: str):
+    def __init__(self, business_manager, category_path: str, entry: Entry, window_id: str, config_manager=None):
         super().__init__()
-        
+
         # 基本属性
         self.business_manager = business_manager
         self.category_path = category_path
         self.entry = entry
         self.window_id = window_id
+        self.config_manager = config_manager
         self.is_content_modified = False
         
         # 自动保存定时器
@@ -241,8 +242,13 @@ class EntryWindow(QMainWindow):
         # 实时更新详细信息
         self.update_entry_details_realtime()
 
-        # 启动自动保存定时器（3秒后保存）
-        self.auto_save_timer.start(3000)
+        # 启动自动保存定时器（根据配置决定间隔）
+        if self.config_manager and self.config_manager.is_auto_save_enabled():
+            interval = self.config_manager.get_auto_save_interval()
+            self.auto_save_timer.start(interval)
+        else:
+            # 如果没有配置管理器或自动保存被禁用，使用默认间隔
+            self.auto_save_timer.start(3000)
         
     def update_window_title(self):
         """更新窗口标题"""
@@ -349,6 +355,10 @@ class EntryWindow(QMainWindow):
 
     def auto_save(self):
         """自动保存"""
+        # 检查是否启用自动保存
+        if self.config_manager and not self.config_manager.is_auto_save_enabled():
+            return
+
         if self.is_content_modified:
             self.save_entry()
 

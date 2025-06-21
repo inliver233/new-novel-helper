@@ -4,15 +4,18 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QSplitter,
     QMenu, QInputDialog, QMessageBox, QListWidget, QListWidgetItem
 )
-from PyQt6.QtCore import Qt, QPoint
+from PyQt6.QtCore import Qt, QPoint, QTimer
 from PyQt6.QtGui import QAction
 from ..core.business_manager import BusinessManager
+from ..core.config_manager import ConfigManager
 from .search_dialog import SearchDialog
+from .settings_dialog import SettingsDialog
 from .ui_styles import UIStyles
 from .ui_components import UIComponents
 from .enhanced_category_tree import EnhancedCategoryTree
 from .entry_window_manager import EntryWindowManager
 from .context_menu_helper import ContextMenuHelper
+from .status_indicator import StatusIndicatorBar, SaveStatusIndicator
 from ..utils.logger import LoggerConfig, log_exception
 from ..utils.time_utils import format_datetime_chinese, format_word_count, format_tags_display, count_text_stats
 
@@ -31,11 +34,14 @@ class MainWindow(QMainWindow):
         self.business_manager = BusinessManager(data_path)
         self.data_path = data_path
 
+        # 初始化配置管理器
+        self.config_manager = ConfigManager(data_path)
+
         # 初始化日志记录器
         self.logger = LoggerConfig.get_logger("main_window")
 
         # 初始化条目窗口管理器
-        self.entry_window_manager = EntryWindowManager(self.business_manager)
+        self.entry_window_manager = EntryWindowManager(self.business_manager, self.config_manager)
         self.setup_entry_window_manager()
 
         # 初始化上下文菜单辅助类
@@ -48,6 +54,11 @@ class MainWindow(QMainWindow):
 
         # 拖拽模式相关
         self.adjust_action = None  # 调整按钮的引用
+
+        # 自动保存相关
+        self.auto_save_timer = QTimer()
+        self.auto_save_timer.timeout.connect(self.auto_save_current_entry)
+        self.auto_save_timer.setSingleShot(True)
 
         # 创建菜单栏和工具栏
         UIComponents.create_menu_bar(self)
@@ -87,7 +98,7 @@ class MainWindow(QMainWindow):
         splitter.addWidget(middle_panel)
 
         # 右侧：内容编辑器面板
-        right_panel, self.title_edit, self.tags_edit, self.content_editor, self.details_info_label = UIComponents.create_editor_panel(self)
+        right_panel, self.title_edit, self.tags_edit, self.content_editor, self.details_info_label, self.status_indicator_bar = UIComponents.create_editor_panel(self)
         splitter.addWidget(right_panel)
 
         # 设置分割器的初始大小比例和样式
@@ -277,6 +288,11 @@ class MainWindow(QMainWindow):
 
         self.is_content_modified = False
 
+        # 清除状态指示器（加载条目时不应显示未保存状态）
+        if self.config_manager.is_status_indicators_enabled():
+            self.status_indicator_bar.hide_indicator("save_status")
+            self.status_indicator_bar.hide_indicator("auto_save")
+
     def clear_editor(self):
         """清空编辑器"""
         self.current_entry = None
@@ -285,6 +301,11 @@ class MainWindow(QMainWindow):
         self.content_editor.clear()
         self.details_info_label.setText("请选择一个条目查看详细信息")
         self.is_content_modified = False
+
+        # 清除状态指示器
+        if self.config_manager.is_status_indicators_enabled():
+            self.status_indicator_bar.hide_indicator("save_status")
+            self.status_indicator_bar.hide_indicator("auto_save")
 
     def update_entry_details(self):
         """更新条目详细信息显示"""
@@ -331,17 +352,29 @@ class MainWindow(QMainWindow):
     def on_content_changed(self):
         """内容变化时的处理"""
         self.is_content_modified = True
+
         # 实时更新字数统计
         if self.current_entry:
             self.update_entry_details_realtime()
 
+        # 更新状态指示器
+        if self.config_manager.is_status_indicators_enabled():
+            from .status_indicator import StatusType
+            self.status_indicator_bar.update_indicator("save_status", StatusType.MODIFIED, "未保存")
+
+        # 启动自动保存定时器
+        if self.config_manager.is_auto_save_enabled() and self.current_entry:
+            self.auto_save_timer.start(self.config_manager.get_auto_save_interval())
+
     def on_title_changed(self):
         """标题变化时的处理"""
         self.is_content_modified = True
+        self.on_content_changed()  # 复用内容变化的处理逻辑
 
     def on_tags_changed(self):
         """标签变化时的处理"""
         self.is_content_modified = True
+        self.on_content_changed()  # 复用内容变化的处理逻辑
 
     def create_new_entry(self):
         """创建新条目"""
@@ -387,6 +420,11 @@ class MainWindow(QMainWindow):
         if not self.current_entry or not self.current_category_path:
             return
 
+        # 显示保存中状态
+        if self.config_manager.is_status_indicators_enabled():
+            from .status_indicator import StatusType
+            self.status_indicator_bar.update_indicator("save_status", StatusType.SAVING, "保存中...")
+
         try:
             # 获取编辑器中的内容
             title = self.title_edit.text().strip()
@@ -426,14 +464,99 @@ class MainWindow(QMainWindow):
             self.update_status_bar()
             self.show_operation_result("保存条目", True, self.current_entry.title)
 
+            # 显示保存成功状态，隐藏所有其他状态
+            if self.config_manager.is_status_indicators_enabled():
+                from .status_indicator import StatusType
+                # 隐藏修改状态和自动保存状态
+                self.status_indicator_bar.hide_indicator("auto_save")
+                # 显示保存成功状态
+                self.status_indicator_bar.update_indicator("save_status", StatusType.SAVED, "已保存")
+                self.status_indicator_bar.show_indicator("save_status", 2000)  # 2秒后自动隐藏
+
         except (FileNotFoundError, PermissionError, OSError) as e:
             error_msg = f"文件系统错误: {e}"
             self.show_operation_result("保存条目", False, error_msg)
             log_exception(self.logger, "保存条目", e)
+
+            # 显示保存错误状态
+            if self.config_manager.is_status_indicators_enabled():
+                from .status_indicator import StatusType
+                self.status_indicator_bar.update_indicator("save_status", StatusType.ERROR, "保存失败")
+
         except (json.JSONDecodeError, ValueError) as e:
             error_msg = f"数据格式错误: {e}"
             self.show_operation_result("保存条目", False, error_msg)
             log_exception(self.logger, "保存条目", e)
+
+            # 显示保存错误状态
+            if self.config_manager.is_status_indicators_enabled():
+                from .status_indicator import StatusType
+                self.status_indicator_bar.update_indicator("save_status", StatusType.ERROR, "保存失败")
+
+    def auto_save_current_entry(self):
+        """自动保存当前条目"""
+        if not self.is_content_modified or not self.current_entry or not self.current_category_path:
+            return
+
+        try:
+            # 显示自动保存中状态
+            if self.config_manager.is_status_indicators_enabled():
+                from .status_indicator import StatusType
+                self.status_indicator_bar.update_indicator("auto_save", StatusType.SAVING, "自动保存中...")
+
+            # 获取编辑器中的内容
+            title = self.title_edit.text().strip()
+            content = self.content_editor.toPlainText()
+            tags_text = self.tags_edit.text().strip()
+            tags = [tag.strip() for tag in tags_text.split(",") if tag.strip()]
+
+            if not title:
+                title = self.current_entry.title
+
+            # 更新条目
+            self.business_manager.update_entry(
+                self.current_category_path,
+                self.current_entry.uuid,
+                title=title,
+                content=content,
+                tags=tags
+            )
+
+            # 更新当前条目对象
+            self.current_entry.update_content(title=title, content=content, tags=tags)
+
+            # 更新条目列表中的标题
+            current_item = self.entry_list.currentItem()
+            if current_item:
+                current_item.setText(title)
+
+            # 同步到独立窗口
+            self.entry_window_manager.sync_entry_update(
+                self.current_category_path,
+                self.current_entry.uuid,
+                self.current_entry
+            )
+
+            self.is_content_modified = False
+            self.logger.info(f"自动保存成功: {self.current_entry.title}")
+
+            # 显示自动保存成功状态，并隐藏修改状态
+            if self.config_manager.is_status_indicators_enabled():
+                from .status_indicator import StatusType
+                # 隐藏修改状态指示器
+                self.status_indicator_bar.hide_indicator("save_status")
+                # 显示自动保存成功状态
+                self.status_indicator_bar.update_indicator("auto_save", StatusType.SAVED, "自动保存")
+                self.status_indicator_bar.show_indicator("auto_save", 1500)  # 1.5秒后自动隐藏
+
+        except Exception as e:
+            self.logger.warning(f"自动保存失败: {e}")
+
+            # 显示自动保存错误状态
+            if self.config_manager.is_status_indicators_enabled():
+                from .status_indicator import StatusType
+                self.status_indicator_bar.update_indicator("auto_save", StatusType.ERROR, "自动保存失败")
+                self.status_indicator_bar.show_indicator("auto_save", 3000)  # 3秒后自动隐藏
 
     def refresh_category_tree_display(self):
         """刷新分类树显示的辅助方法"""
@@ -826,3 +949,35 @@ class MainWindow(QMainWindow):
             # 恢复按钮状态
             if self.adjust_action:
                 self.adjust_action.setChecked(not checked)
+
+    def open_settings_dialog(self):
+        """打开设置对话框"""
+        try:
+            dialog = SettingsDialog(self.config_manager, self)
+            dialog.settings_changed.connect(self.on_settings_changed)
+            dialog.exec()
+
+        except Exception as e:
+            self.logger.error(f"打开设置对话框失败: {e}")
+            QMessageBox.critical(self, "错误", f"打开设置对话框失败: {e}")
+
+    def on_settings_changed(self):
+        """设置发生变化时的处理"""
+        try:
+            # 重新加载配置
+            self.config_manager.load_config()
+
+            # 更新状态指示器显示
+            if not self.config_manager.is_status_indicators_enabled():
+                self.status_indicator_bar.clear_all()
+
+            # 停止或重新配置自动保存定时器
+            if not self.config_manager.is_auto_save_enabled():
+                self.auto_save_timer.stop()
+
+            self.logger.info("设置已更新")
+            self.show_status_message("设置已保存", 2000)
+
+        except Exception as e:
+            self.logger.error(f"应用设置变化失败: {e}")
+            QMessageBox.warning(self, "警告", f"应用设置变化失败: {e}")
